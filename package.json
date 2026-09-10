@@ -17,8 +17,12 @@
     "interactive",
     "tui"
   ],
-  "author": "",
+  "author": "DohmBoy64Bit",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DohmBoy64Bit/pi-qwizard.git"
+  },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": ">=1.0.0"
   },
