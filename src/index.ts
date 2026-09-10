@@ -1512,8 +1512,7 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerCommand("q-status", {
     description: "Show questions extension usage statistics",
-    parameters: Type.Object({}),
-    async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
+    handler: async (_args, ctx) => {
       ctx.ui.notify("Questions extension: 3 tools registered (question, questionnaire, question_input)", "info");
       return {
         content: [{ type: "text", text: "Questions extension loaded with 3 tools: question, questionnaire, question_input" }],
@@ -1523,8 +1522,7 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerCommand("q-clear", {
     description: "Clear any cached question state (if applicable)",
-    parameters: Type.Object({}),
-    async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
+    handler: async (_args, ctx) => {
       ctx.ui.notify("Question state cleared", "info");
       return {
         content: [{ type: "text", text: "Question state cleared successfully" }],
