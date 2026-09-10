@@ -275,6 +275,8 @@ function registerQuestionTool(pi: ExtensionAPI) {
         let editMode = false;
         let cachedLines: string[] | undefined;
         const selectedIndices = new Set<number>();
+        let justToggled = false;
+        let toggleTimeout: ReturnType<typeof setTimeout> | null = null;
 
         const editorTheme: EditorTheme = {
           borderColor: (s) => theme.fg("accent", s),
@@ -337,12 +339,32 @@ function registerQuestionTool(pi: ExtensionAPI) {
             }
 
             if (isMulti) {
+              if (justToggled) {
+                // Second Enter = submit
+                if (selectedIndices.size > 0) {
+                  done({
+                    answer: Array.from(selectedIndices).map((i) => allOptions[i].label),
+                    wasCustom: false,
+                  });
+                } else {
+                  // Nothing selected, just move on
+                  done(null);
+                }
+                return;
+              }
+              // First Enter = toggle
               if (selectedIndices.has(optionIndex)) {
                 selectedIndices.delete(optionIndex);
               } else {
                 selectedIndices.add(optionIndex);
               }
+              justToggled = true;
               refresh();
+              if (toggleTimeout) clearTimeout(toggleTimeout);
+              toggleTimeout = setTimeout(() => {
+                justToggled = false;
+                toggleTimeout = null;
+              }, 800);
               return;
             }
 
@@ -355,6 +377,10 @@ function registerQuestionTool(pi: ExtensionAPI) {
           }
 
           if (matchesKey(data, Key.escape)) {
+            if (toggleTimeout) {
+              clearTimeout(toggleTimeout);
+              toggleTimeout = null;
+            }
             if (isMulti && selectedIndices.size > 0) {
               done({
                 answer: Array.from(selectedIndices).map((i) => allOptions[i].label),
@@ -438,10 +464,22 @@ function registerQuestionTool(pi: ExtensionAPI) {
           if (editMode) {
             addWrappedWithPrefix(" ", theme.fg("dim", "Enter to submit • Esc to go back"));
           } else if (isMulti) {
-            addWrappedWithPrefix(
-              " ",
-              theme.fg("dim", "↑↓ navigate • Enter toggle • Esc submit selected"),
-            );
+            if (justToggled) {
+              addWrappedWithPrefix(
+                " ",
+                theme.fg("accent", "↑↓ navigate • Enter to submit • Esc to submit selected"),
+              );
+            } else if (selectedIndices.size > 0) {
+              addWrappedWithPrefix(
+                " ",
+                theme.fg("dim", "↑↓ navigate • Enter toggle • Enter submit • Esc submit selected"),
+              );
+            } else {
+              addWrappedWithPrefix(
+                " ",
+                theme.fg("dim", "↑↓ navigate • Enter toggle • Esc cancel"),
+              );
+            }
           } else {
             addWrappedWithPrefix(
               " ",
