@@ -44,7 +44,7 @@ question({
 })
 ```
 
-**Interface:** Options list with ↑↓ navigation, Enter to select/toggle, Esc to cancel.
+**Interface:** Options list with ↑↓ navigation, Enter to select/toggle, Esc to cancel (single) or submit selected (multi).
 
 ### `questionnaire`
 
@@ -148,7 +148,7 @@ questionnaire({
 })
 ```
 
-**Interface:** Tab bar navigation with progress bar (e.g., `█░ 60% (3/5)`), Tab/←→ to switch questions, ↑↓ to select options, Enter to advance, Esc to cancel.
+**Interface:** Tab bar navigation with progress bar (e.g., `█░ 60% (3/5)`), Tab/→ to switch forward, Shift+Tab/← to switch backward, ↑↓ to select options, Enter to advance, Esc to cancel.
 
 ### `question_input`
 
