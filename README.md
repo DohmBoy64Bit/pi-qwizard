@@ -71,14 +71,14 @@ question_input({
 ## Installation
 
 ```bash
-pi install pi-qwizard
+pi install @dohmboy64bit/pi-qwizard
 ```
 
 Or add to your `settings.json`:
 
 ```json
 {
-  "packages": ["pi-qwizard@1.0.0"]
+  "packages": ["@dohmboy64bit/pi-qwizard@1.0.0"]
 }
 ```
 

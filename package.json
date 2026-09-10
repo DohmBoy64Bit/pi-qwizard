@@ -1,5 +1,5 @@
 {
-  "name": "pi-qwizard",
+  "name": "@dohmboy64bit/pi-qwizard",
   "version": "1.0.0",
   "description": "Interactive question tools for Pi — single questions, multi-step questionnaires, and open-ended input",
   "main": "./src/index.ts",
@@ -17,7 +17,6 @@
     "interactive",
     "tui"
   ],
-  "author": "DohmBoy64Bit",
   "license": "MIT",
   "repository": {
     "type": "git",
