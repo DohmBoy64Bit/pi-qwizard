@@ -5,7 +5,9 @@
   "main": "./src/index.ts",
   "type": "module",
   "scripts": {
-    "test": "node src/questions.test.cjs"
+    "test": "node src/questions.test.cjs",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check src/index.ts"
   },
   "keywords": [
     "pi-package",
@@ -29,5 +31,8 @@
     "extensions": [
       "./src/index.ts"
     ]
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.13"
   }
 }
