@@ -201,7 +201,7 @@ Or add to your `settings.json`:
 
 ```json
 {
-  "packages": ["@dohmboy64bit/pi-qwizard@1.1.0"]
+  "packages": ["@dohmboy64bit/pi-qwizard@1.2.0"]
 }
 ```
 
