@@ -5,7 +5,7 @@
   "main": "./src/index.ts",
   "type": "module",
   "scripts": {
-    "test": "echo \"No tests yet\" && exit 0"
+    "test": "node src/questions.test.cjs"
   },
   "keywords": [
     "pi-package",
