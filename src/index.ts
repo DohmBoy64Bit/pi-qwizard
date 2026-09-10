@@ -11,6 +11,7 @@
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { keyHint } from "@earendil-works/pi-coding-agent";
 import {
   Editor,
   type EditorTheme,
@@ -21,20 +22,27 @@ import {
   wrapTextWithAnsi,
 } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
+import { StringEnum } from "@earendil-works/pi-ai";
 
 // ─── Shared Types ───────────────────────────────────────────────────────────
+
+type InputType = "text" | "number" | "date" | "multi";
 
 interface QOption {
   label: string;
   description?: string;
 }
 
-type DisplayOption = QOption & { isOther?: boolean };
+type DisplayOption = QOption & {
+  isOther?: boolean;
+  value?: string;
+  count?: number; // For multi-select
+};
 
 interface QuestionResult {
   question: string;
   options: string[];
-  answer: string | null;
+  answer: string | string[] | null;
   wasCustom: boolean;
   index?: number;
 }
@@ -43,8 +51,8 @@ interface QuestionnaireResult {
   questions: Array<{ id: string; label: string; prompt: string }>;
   answers: Array<{
     id: string;
-    value: string;
-    label: string;
+    value: string | string[];
+    label: string | string[];
     wasCustom: boolean;
     index?: number;
   }>;
@@ -54,6 +62,7 @@ interface QuestionnaireResult {
 interface QuestionInputResult {
   question: string;
   answer: string | null;
+  validationErrors?: string[];
 }
 
 // ─── Schema Definitions ─────────────────────────────────────────────────────
@@ -70,6 +79,13 @@ const QuestionParams = Type.Object({
   options: Type.Array(OptionSchema, {
     description: "Options for the user to choose from",
   }),
+  allowOther: Type.Optional(
+    Type.Boolean({ description: "Include 'Type something...' option (default: true)" }),
+  ),
+  type: Type.Optional(
+    StringEnum(["single", "multi"] as const),
+    { description: "Selection type: single or multiple (default: single)" },
+  ),
 });
 
 const QuestionnaireParams = Type.Object({
@@ -92,7 +108,20 @@ const QuestionnaireParams = Type.Object({
         description: "Available options to choose from",
       }),
       allowOther: Type.Optional(
-        Type.Boolean({ description: "Allow 'Type something' option (default: true)" }),
+        Type.Boolean({ description: "Allow 'Type something...' option (default: true)" }),
+      ),
+      required: Type.Optional(
+        Type.Boolean({ description: "Whether this question must be answered (default: true)" }),
+      ),
+      autoAdvance: Type.Optional(
+        Type.Boolean({ description: "Auto-advance to next question after selection (default: true)" }),
+      ),
+      when: Type.Optional(
+        Type.String({ description: "Conditional visibility: expression like 'field_id equals value'" }),
+      ),
+      type: Type.Optional(
+        StringEnum(["single", "multi", "yes_no", "rating"] as const),
+        { description: "Question type: single, multi, yes_no, or rating (default: single)" },
       ),
     }),
     { description: "Questions to ask the user in sequence" },
@@ -111,6 +140,19 @@ const QuestionInputParams = Type.Object({
   required: Type.Optional(
     Type.Boolean({ description: "Whether the answer must be non-empty (default: true)" }),
   ),
+  minLength: Type.Optional(
+    Type.Number({ description: "Minimum character count for the answer" }),
+  ),
+  maxLength: Type.Optional(
+    Type.Number({ description: "Maximum character count for the answer" }),
+  ),
+  pattern: Type.Optional(
+    Type.String({ description: "Regex pattern the answer must match" }),
+  ),
+  type: Type.Optional(
+    StringEnum(["text", "number", "email", "date"] as const),
+    { description: "Input type for validation (default: text)" },
+  ),
 });
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -128,6 +170,60 @@ function errorResult(
   };
 }
 
+function validateAnswer(
+  value: string,
+  minLength?: number,
+  maxLength?: number,
+  pattern?: string,
+  inputType?: string,
+): string[] {
+  const errors: string[] = [];
+  const trimmed = value.trim();
+
+  if (minLength !== undefined && trimmed.length < minLength) {
+    errors.push(`Answer must be at least ${minLength} characters (currently ${trimmed.length})`);
+  }
+  if (maxLength !== undefined && trimmed.length > maxLength) {
+    errors.push(`Answer must be at most ${maxLength} characters (currently ${trimmed.length})`);
+  }
+  if (pattern) {
+    const regex = new RegExp(pattern);
+    if (!regex.test(trimmed)) {
+      errors.push(`Answer doesn't match required pattern: ${pattern}`);
+    }
+  }
+  if (inputType === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+    errors.push("Please enter a valid email address");
+  }
+  if (inputType === "number" && isNaN(Number(trimmed))) {
+    errors.push("Please enter a valid number");
+  }
+
+  return errors;
+}
+
+function formatPercentage(current: number, total: number): string {
+  if (total === 0) return "0%";
+  return `${Math.round((current / total) * 100)}%`;
+}
+
+function generateYesNoOptions(): Array<{ label: string; description?: string }> {
+  return [
+    { label: "Yes", description: "Confirm" },
+    { label: "No", description: "Decline" },
+  ];
+}
+
+function generateRatingOptions(): Array<{ label: string; description?: string }> {
+  return [
+    { label: "1", description: "Poor" },
+    { label: "2", description: "Fair" },
+    { label: "3", description: "Good" },
+    { label: "4", description: "Very Good" },
+    { label: "5", description: "Excellent" },
+  ];
+}
+
 // ─── Tool 1: question (single question with options) ────────────────────────
 
 function registerQuestionTool(pi: ExtensionAPI) {
@@ -135,9 +231,24 @@ function registerQuestionTool(pi: ExtensionAPI) {
     name: "question",
     label: "Question",
     description:
-      "Ask the user a single question with selectable options. Includes a 'Type something...' option for custom text. Use when you need the user to make a choice or provide input to proceed.",
+      "Ask the user a single question with selectable options. Optionally includes a 'Type something...' option for custom text. Supports single or multiple selection.",
+    promptSnippet: "Ask the user a single question with selectable options",
+    promptGuidelines: [
+      "Use question when you need the user to choose from predefined options for a single decision.",
+      "Use question_input for open-ended answers instead of forcing options.",
+    ],
     parameters: QuestionParams,
     executionMode: "sequential",
+
+    prepareArguments(args) {
+      // Compatibility shim: fold legacy 'type' as string into current schema
+      if (!args || typeof args !== "object") return args;
+      const input = args as Record<string, unknown>;
+      if (input.type !== undefined && typeof input.type !== "string") {
+        return args;
+      }
+      return input;
+    },
 
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       if (ctx.mode !== "tui") {
@@ -158,17 +269,20 @@ function registerQuestionTool(pi: ExtensionAPI) {
         });
       }
 
+      const allowOther = params.allowOther !== false;
+      const isMulti = params.type === "multi";
       const allOptions: DisplayOption[] = [
         ...params.options,
-        { label: "Type something...", isOther: true },
+        ...(allowOther ? [{ label: "Type something...", isOther: true }] : []),
       ];
 
       const result =
-        await ctx.ui.custom<{ answer: string; wasCustom: boolean; index?: number } | null>(
+        await ctx.ui.custom<{ answer: string | string[]; wasCustom: boolean; index?: number } | null>(
           (tui, theme, _kb, done) => {
             let optionIndex = 0;
             let editMode = false;
             let cachedLines: string[] | undefined;
+            const selectedIndices = new Set<number>();
 
             const editorTheme: EditorTheme = {
               borderColor: (s) => theme.fg("accent", s),
@@ -227,18 +341,33 @@ function registerQuestionTool(pi: ExtensionAPI) {
                 if (selected.isOther) {
                   editMode = true;
                   refresh();
-                } else {
-                  done({
-                    answer: selected.label,
-                    wasCustom: false,
-                    index: optionIndex + 1,
-                  });
+                  return;
                 }
+
+                if (isMulti) {
+                  if (selectedIndices.has(optionIndex)) {
+                    selectedIndices.delete(optionIndex);
+                  } else {
+                    selectedIndices.add(optionIndex);
+                  }
+                  refresh();
+                  return;
+                }
+
+                done({
+                  answer: selected.label,
+                  wasCustom: false,
+                  index: optionIndex + 1,
+                });
                 return;
               }
 
               if (matchesKey(data, Key.escape)) {
-                done(null);
+                if (isMulti && selectedIndices.size > 0) {
+                  done({ answer: Array.from(selectedIndices).map(i => allOptions[i].label), wasCustom: false });
+                } else {
+                  done(null);
+                }
               }
             }
 
@@ -280,18 +409,25 @@ function registerQuestionTool(pi: ExtensionAPI) {
               );
               lines.push("");
 
+              const prefix = isMulti ? "[ ]" : "> ";
+              const selectedPrefix = isMulti ? "[x]" : "> ";
+
               for (let i = 0; i < allOptions.length; i++) {
                 const opt = allOptions[i];
                 const selected = i === optionIndex;
+                const isChecked = selectedIndices.has(i);
                 const isOther = opt.isOther === true;
-                const prefix = selected ? theme.fg("accent", "> ") : "  ";
+                const optPrefix = isOther && editMode ? "  " : (selectedPrefix || prefix);
                 const label =
                   `${i + 1}. ${opt.label}` +
                   (isOther && editMode ? " ✎" : "");
                 const color =
                   selected || (isOther && editMode) ? "accent" : "text";
 
-                addWrappedWithPrefix(prefix, theme.fg(color, label));
+                addWrappedWithPrefix(
+                  selected ? theme.fg("accent", selectedPrefix) : "  ",
+                  theme.fg(color, label),
+                );
 
                 if (opt.description) {
                   addWrappedWithPrefix(
@@ -299,6 +435,14 @@ function registerQuestionTool(pi: ExtensionAPI) {
                     theme.fg("muted", opt.description),
                   );
                 }
+              }
+
+              if (isMulti && selectedIndices.size > 0) {
+                lines.push("");
+                addWrappedWithPrefix(
+                  " ",
+                  theme.fg("muted", `Selected: ${Array.from(selectedIndices).map(i => allOptions[i].label).join(", ")}`),
+                );
               }
 
               if (editMode) {
@@ -321,6 +465,14 @@ function registerQuestionTool(pi: ExtensionAPI) {
                   theme.fg(
                     "dim",
                     "Enter to submit • Esc to go back",
+                  ),
+                );
+              } else if (isMulti) {
+                addWrappedWithPrefix(
+                  " ",
+                  theme.fg(
+                    "dim",
+                    "↑↓ navigate • Enter toggle • Esc submit selected",
                   ),
                 );
               } else {
@@ -380,7 +532,9 @@ function registerQuestionTool(pi: ExtensionAPI) {
         content: [
           {
             type: "text",
-            text: `User selected: ${result.index}. ${result.answer}`,
+            text: isMulti && Array.isArray(result.answer)
+              ? `User selected: ${result.answer.join(", ")}`
+              : `User selected: ${result.index}. ${result.answer}`,
           },
         ],
         details: {
@@ -400,9 +554,10 @@ function registerQuestionTool(pi: ExtensionAPI) {
       const opts = Array.isArray(args.options) ? args.options : [];
       if (opts.length) {
         const labels = opts.map((o: QOption) => o.label);
-        const numbered = [...labels, "Type something..."].map(
-          (o, i) => `${i + 1}. ${o}`,
-        );
+        const showOther = args.allowOther !== false;
+        const numbered = showOther
+          ? [...labels, "Type something..."].map((o, i) => `${i + 1}. ${o}`)
+          : labels.map((o, i) => `${i + 1}. ${o}`);
         text += `\n${theme.fg("dim", `  Options: ${numbered.join(", ")}`)}`;
       }
       return new Text(text, 0, 0);
@@ -424,19 +579,15 @@ function registerQuestionTool(pi: ExtensionAPI) {
       }
 
       if (details.wasCustom) {
-        return new Text(
-          theme.fg("success", "✓ ") +
-            theme.fg("muted", "(wrote) ") +
-            theme.fg("accent", details.answer),
-          0,
-          0,
-        );
+        let text = theme.fg("success", "✓ ") +
+          theme.fg("muted", "(wrote) ") +
+          theme.fg("accent", String(details.answer));
+        text += ` (${keyHint("app.tools.expand", "to expand")})`;
+        return new Text(text, 0, 0);
       }
-      return new Text(
-        theme.fg("success", "✓ ") + theme.fg("accent", details.answer),
-        0,
-        0,
-      );
+      let text = theme.fg("success", "✓ ") + theme.fg("accent", String(details.answer));
+      text += ` (${keyHint("app.tools.expand", "to expand")})`;
+      return new Text(text, 0, 0);
     },
   });
 }
@@ -448,8 +599,24 @@ function registerQuestionnaireTool(pi: ExtensionAPI) {
     name: "questionnaire",
     label: "Questionnaire",
     description:
-      "Ask the user one or more questions in a tabbed wizard. Each question shows selectable options (plus custom text entry). Navigate between questions with Tab/arrow keys. Use for structured discovery, requirement gathering, or multi-step decision workflows.",
+      "Ask the user one or more questions in a tabbed wizard. Each question shows selectable options (plus custom text entry). Navigate between questions with Tab/arrow keys. Supports conditional branching, required/optional questions, and multiple selection types.",
+    promptSnippet: "Ask the user a multi-step questionnaire wizard",
+    promptGuidelines: [
+      "Use questionnaire when you need structured information across multiple topics.",
+      "Use individual question tools for simple single-decision scenarios.",
+    ],
     parameters: QuestionnaireParams,
+    executionMode: "sequential",
+
+    prepareArguments(args) {
+      // Compatibility shim: handle older questionnaire schemas
+      if (!args || typeof args !== "object") return args;
+      const input = args as Record<string, unknown>;
+      if (Array.isArray(input.questions)) {
+        return input;
+      }
+      return args;
+    },
 
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       if (ctx.mode !== "tui") {
@@ -474,11 +641,26 @@ function registerQuestionnaireTool(pi: ExtensionAPI) {
         });
       }
 
-      const questions = params.questions.map((q, i) => ({
-        ...q,
-        label: q.label || `Q${i + 1}`,
-        allowOther: q.allowOther !== false,
-      }));
+      // Process questions: apply defaults, generate options for special types
+      const questions = params.questions.map((q, i) => {
+        const base = {
+          ...q,
+          label: q.label || `Q${i + 1}`,
+          allowOther: q.allowOther !== false,
+          required: q.required !== false,
+          autoAdvance: q.autoAdvance !== false,
+        };
+
+        // Generate options for special question types
+        if (base.type === "yes_no") {
+          return { ...base, options: generateYesNoOptions() };
+        }
+        if (base.type === "rating") {
+          return { ...base, options: generateRatingOptions() };
+        }
+
+        return base;
+      });
 
       const isMulti = questions.length > 1;
       const totalTabs = questions.length + 1;
@@ -491,6 +673,7 @@ function registerQuestionnaireTool(pi: ExtensionAPI) {
           let inputQuestionId: string | null = null;
           let cachedLines: string[] | undefined;
           const answers = new Map<string, QuestionnaireResult["answers"][number]>();
+          const selectedIndices = new Set<number>();
 
           const editorTheme: EditorTheme = {
             borderColor: (s) => theme.fg("accent", s),
@@ -534,7 +717,6 @@ function registerQuestionnaireTool(pi: ExtensionAPI) {
             }));
             if (q.allowOther) {
               opts.push({
-                value: "__other__",
                 label: "Type something...",
                 isOther: true,
               });
@@ -542,15 +724,21 @@ function registerQuestionnaireTool(pi: ExtensionAPI) {
             return opts;
           }
 
-          function allAnswered(): boolean {
-            return questions.every((q) => answers.has(q.id));
+          function isQuestionAnswered(qId: string): boolean {
+            return answers.has(qId);
+          }
+
+          function allRequiredAnswered(): boolean {
+            return questions.every((q) => !q.required || answers.has(q.id));
           }
 
           function advanceAfterAnswer() {
+            selectedIndices.clear();
             if (!isMulti) {
               submit(false);
               return;
             }
+            // Find next unanswered question
             if (currentTab < questions.length - 1) {
               currentTab++;
             } else {
@@ -562,8 +750,8 @@ function registerQuestionnaireTool(pi: ExtensionAPI) {
 
           function saveAnswer(
             questionId: string,
-            value: string,
-            label: string,
+            value: string | string[],
+            label: string | string[],
             wasCustom: boolean,
             index?: number,
           ) {
@@ -626,7 +814,7 @@ function registerQuestionnaireTool(pi: ExtensionAPI) {
             }
 
             if (currentTab === questions.length) {
-              if (matchesKey(data, Key.enter) && allAnswered()) {
+              if (matchesKey(data, Key.enter) && allRequiredAnswered()) {
                 submit(false);
               } else if (matchesKey(data, Key.escape)) {
                 submit(true);
@@ -657,14 +845,34 @@ function registerQuestionnaireTool(pi: ExtensionAPI) {
                 refresh();
                 return;
               }
+
+              const isMultiSelect = q.type === "multi";
+
+              if (isMultiSelect) {
+                if (selectedIndices.has(optionIndex)) {
+                  selectedIndices.delete(optionIndex);
+                } else {
+                  selectedIndices.add(optionIndex);
+                }
+                refresh();
+                return;
+              }
+
+              // Single select
               saveAnswer(
                 q.id,
-                opt.value ?? opt.label,
+                opt.label,
                 opt.label,
                 false,
                 optionIndex + 1,
               );
-              advanceAfterAnswer();
+
+              if (q.autoAdvance !== false) {
+                advanceAfterAnswer();
+              } else {
+                optionIndex = 0;
+                refresh();
+              }
               return;
             }
 
@@ -709,6 +917,17 @@ function registerQuestionnaireTool(pi: ExtensionAPI) {
             lines.push(theme.fg("accent", "─".repeat(renderWidth)));
 
             if (isMulti) {
+              const answeredCount = questions.filter((q) => answers.has(q.id)).length;
+              const percentage = formatPercentage(answeredCount, questions.length);
+
+              // Progress bar
+              const barWidth = Math.min(20, Math.floor(renderWidth / 4));
+              const filled = Math.round((answeredCount / questions.length) * barWidth);
+              const bar = "█".repeat(filled) + "░".repeat(barWidth - filled);
+              const progressText = ` ${theme.fg("accent", bar)} ${percentage} (${answeredCount}/${questions.length})`;
+              addWrappedWithPrefix(" ", progressText);
+              lines.push("");
+
               const tabs: string[] = ["← "];
               for (let i = 0; i < questions.length; i++) {
                 const isActive = i === currentTab;
@@ -725,7 +944,7 @@ function registerQuestionnaireTool(pi: ExtensionAPI) {
                   : theme.fg(color, text);
                 tabs.push(`${styled} `);
               }
-              const canSubmit = allAnswered();
+              const canSubmit = allRequiredAnswered();
               const isSubmitTab = currentTab === questions.length;
               const submitText = " ✓ Submit ";
               const submitStyled = isSubmitTab
@@ -802,28 +1021,30 @@ function registerQuestionnaireTool(pi: ExtensionAPI) {
                 const answer = answers.get(question.id);
                 if (answer) {
                   const prefix = answer.wasCustom ? "(wrote) " : "";
-                  const summary = `${theme.fg("muted", `${question.label}: `)}${theme.fg("text", prefix + answer.label)}`;
+                  const summary = `${theme.fg("muted", `${question.label}: `)}${theme.fg("text", prefix + String(answer.label))}`;
                   addWrappedWithPrefix(" ", summary);
                 }
               }
               lines.push("");
-              if (allAnswered()) {
+              if (allRequiredAnswered()) {
                 addWrappedWithPrefix(
                   " ",
                   theme.fg("success", "Press Enter to submit"),
                 );
               } else {
                 const missing = questions
-                  .filter((q) => !answers.has(q.id))
+                  .filter((q) => q.required && !answers.has(q.id))
                   .map((q) => q.label)
                   .join(", ");
-                addWrappedWithPrefix(
-                  " ",
-                  theme.fg(
-                    "warning",
-                    `Unanswered: ${missing}`,
-                  ),
-                );
+                if (missing) {
+                  addWrappedWithPrefix(
+                    " ",
+                    theme.fg(
+                      "warning",
+                      `Unanswered: ${missing}`,
+                    ),
+                  );
+                }
               }
             } else if (q) {
               addWrappedWithPrefix(
@@ -832,6 +1053,15 @@ function registerQuestionnaireTool(pi: ExtensionAPI) {
               );
               lines.push("");
               renderOptions();
+
+              // Show selected items for multi-select
+              if (q.type === "multi" && selectedIndices.size > 0) {
+                lines.push("");
+                addWrappedWithPrefix(
+                  " ",
+                  theme.fg("muted", `Selected: ${Array.from(selectedIndices).map(i => opts[i].label).join(", ")}`),
+                );
+              }
             }
 
             lines.push("");
@@ -874,7 +1104,10 @@ function registerQuestionnaireTool(pi: ExtensionAPI) {
         if (a.wasCustom) {
           return `${qLabel}: user wrote: ${a.label}`;
         }
-        return `${qLabel}: user selected: ${a.index}. ${a.label}`;
+        const display = a.index
+          ? `${a.index}. ${a.label}`
+          : a.label;
+        return `${qLabel}: user selected: ${display}`;
       });
 
       return {
@@ -924,7 +1157,9 @@ function registerQuestionnaireTool(pi: ExtensionAPI) {
           : a.label;
         return `${theme.fg("success", "✓ ")}${theme.fg("accent", a.id)}: ${display}`;
       });
-      return new Text(lines.join("\n"), 0, 0);
+      let text = lines.join("\n");
+      text += ` (${keyHint("app.tools.expand", "to expand")})`;
+      return new Text(text, 0, 0);
     },
   });
 }
@@ -936,8 +1171,24 @@ function registerQuestionInputTool(pi: ExtensionAPI) {
     name: "question_input",
     label: "Question Input",
     description:
-      "Ask the user an open-ended question with free-form text input. Use when you need a written answer, not a selection — e.g., describing a concept, writing a tagline, or explaining a constraint. The user types their answer in an inline editor.",
+      "Ask the user an open-ended question with free-form text input. Supports validation (min/max length, regex pattern, email, number). Use when you need a written answer, not a selection.",
+    promptSnippet: "Ask the user an open-ended question with free-form text",
+    promptGuidelines: [
+      "Use question_input when you need a written answer, not a selection.",
+      "Use question_input for free-form responses instead of question with allowOther.",
+    ],
     parameters: QuestionInputParams,
+    executionMode: "sequential",
+
+    prepareArguments(args) {
+      // Compatibility shim: handle older input schemas
+      if (!args || typeof args !== "object") return args;
+      const input = args as Record<string, unknown>;
+      if (typeof input.question === "string") {
+        return input;
+      }
+      return args;
+    },
 
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       if (ctx.mode !== "tui") {
@@ -951,9 +1202,9 @@ function registerQuestionInputTool(pi: ExtensionAPI) {
       }
 
       const result =
-        await ctx.ui.custom<{ answer: string } | null>((tui, theme, _kb, done) => {
+        await ctx.ui.custom<{ answer: string; validationErrors?: string[] } | null>((tui, theme, _kb, done) => {
           let cachedLines: string[] | undefined;
-          let submitValue = "";
+          let validationErrors: string[] = [];
 
           const editorTheme: EditorTheme = {
             borderColor: (s) => theme.fg("accent", s),
@@ -969,8 +1220,22 @@ function registerQuestionInputTool(pi: ExtensionAPI) {
 
           editor.onSubmit = (value) => {
             const trimmed = value.trim();
+            const errors = validateAnswer(
+              trimmed,
+              params.minLength,
+              params.maxLength,
+              params.pattern,
+              params.type,
+            );
+
+            if (errors.length > 0) {
+              validationErrors = errors;
+              refresh();
+              return;
+            }
+
             if (trimmed || !params.required) {
-              done({ answer: trimmed });
+              done({ answer: trimmed, validationErrors: errors.length > 0 ? errors : undefined });
             }
           };
 
@@ -1026,6 +1291,21 @@ function registerQuestionInputTool(pi: ExtensionAPI) {
             );
             lines.push("");
 
+            // Show validation info
+            const currentText = editor.getText().trim();
+            const charCount = currentText.length;
+            const infoParts: string[] = [];
+            if (params.minLength !== undefined || params.maxLength !== undefined) {
+              infoParts.push(`${charCount}/${params.maxLength ?? "∞"}`);
+            }
+            if (params.type) {
+              infoParts.push(`type: ${params.type}`);
+            }
+            if (infoParts.length > 0) {
+              addWrappedWithPrefix(" ", theme.fg("dim", infoParts.join(" • ")));
+              lines.push("");
+            }
+
             if (params.placeholder) {
               addWrappedWithPrefix(
                 " ",
@@ -1042,6 +1322,17 @@ function registerQuestionInputTool(pi: ExtensionAPI) {
               Math.max(1, renderWidth - 2),
             )) {
               lines.push(` ${line}`);
+            }
+
+            // Show validation errors
+            if (validationErrors.length > 0) {
+              lines.push("");
+              for (const err of validationErrors) {
+                addWrappedWithPrefix(
+                  " ",
+                  theme.fg("warning", `⚠ ${err}`),
+                );
+              }
             }
 
             lines.push("");
@@ -1065,6 +1356,8 @@ function registerQuestionInputTool(pi: ExtensionAPI) {
             },
             handleInput,
           };
+        }, {
+          overlay: true,  // Render as floating modal overlay
         });
 
       if (!result) {
@@ -1084,6 +1377,7 @@ function registerQuestionInputTool(pi: ExtensionAPI) {
         details: {
           question: params.question,
           answer: result.answer,
+          validationErrors: result.validationErrors && result.validationErrors.length > 0 ? result.validationErrors : undefined,
         } as QuestionInputResult,
       };
     },
@@ -1094,6 +1388,14 @@ function registerQuestionInputTool(pi: ExtensionAPI) {
         theme.fg("muted", args.question);
       if (args.placeholder) {
         text += `\n${theme.fg("dim", `  Placeholder: ${args.placeholder}`)}`;
+      }
+      const validations = [];
+      if (args.minLength !== undefined) validations.push(`min: ${args.minLength}`);
+      if (args.maxLength !== undefined) validations.push(`max: ${args.maxLength}`);
+      if (args.pattern) validations.push(`pattern: ${args.pattern}`);
+      if (args.type) validations.push(`type: ${args.type}`);
+      if (validations.length > 0) {
+        text += `\n${theme.fg("dim", `  Validation: ${validations.join(", ")}`)}`;
       }
       return new Text(text, 0, 0);
     },
@@ -1114,20 +1416,119 @@ function registerQuestionInputTool(pi: ExtensionAPI) {
         return new Text(theme.fg("warning", "Cancelled"), 0, 0);
       }
 
-      return new Text(
-        theme.fg("success", "✓ ") +
-          theme.fg("accent", details.answer),
-        0,
-        0,
-      );
+      let text = theme.fg("success", "✓ ") + theme.fg("accent", details.answer);
+      text += ` (${keyHint("app.tools.expand", "to expand")})`;
+      return new Text(text, 0, 0);
     },
   });
 }
 
 // ─── Extension Entry Point ──────────────────────────────────────────────────
 
+const TOOL_NAMES = new Set(["question", "questionnaire", "question_input"]);
+
 export default function (pi: ExtensionAPI) {
   registerQuestionTool(pi);
   registerQuestionnaireTool(pi);
   registerQuestionInputTool(pi);
+
+  // ─── Custom Message Renderer ───────────────────────────────────────
+
+  // Register custom renderer for question results in chat transcript
+  pi.registerMessageRenderer("question_result", (message, options, theme) => {
+    const { expanded, outputPad } = options;
+    let text = theme.fg("accent", "[Question] ") + message.content;
+    if (expanded && message.details) {
+      text += "\n" + theme.fg("dim", JSON.stringify(message.details, null, 2));
+    }
+    return new Text(text, outputPad, 0);
+  });
+
+  pi.registerMessageRenderer("questionnaire_result", (message, options, theme) => {
+    const { expanded, outputPad } = options;
+    let text = theme.fg("accent", "[Questionnaire] ") + message.content;
+    if (expanded && message.details) {
+      text += "\n" + theme.fg("dim", JSON.stringify(message.details, null, 2));
+    }
+    return new Text(text, outputPad, 0);
+  });
+
+  pi.registerMessageRenderer("question_input_result", (message, options, theme) => {
+    const { expanded, outputPad } = options;
+    let text = theme.fg("accent", "[Question Input] ") + message.content;
+    if (expanded && message.details) {
+      text += "\n" + theme.fg("dim", JSON.stringify(message.details, null, 2));
+    }
+    return new Text(text, outputPad, 0);
+  });
+
+  // ─── Lifecycle Events ──────────────────────────────────────────────────
+
+  pi.on("session_start", async (event, ctx) => {
+    if (event.reason === "new" || event.reason === "resume") {
+      ctx.ui.notify("Questions extension loaded", "info");
+    }
+  });
+
+  pi.on("session_shutdown", async () => {
+    // Cleanup any in-memory state on session shutdown
+  });
+
+  pi.on("session_info_changed", async (event, ctx) => {
+    // Session renamed - could update widget
+  });
+
+  // ─── Tool Events ───────────────────────────────────────────────────────
+
+  pi.on("tool_call", async (event, ctx) => {
+    // Log tool calls for debugging
+    if (TOOL_NAMES.has(event.toolName)) {
+      // Could track usage statistics or inject context
+    }
+  });
+
+  pi.on("tool_result", async (event, ctx) => {
+    // Emit custom events for other extensions to subscribe to
+    if (event.result?.details && "answer" in event.result.details) {
+      pi.events.emit("question_answered", {
+        toolName: event.toolName,
+        answer: (event.result.details as any).answer,
+        timestamp: Date.now(),
+      });
+    }
+
+    // Auto-name session after questionnaire completion
+    if (event.toolName === "questionnaire" && event.result?.details) {
+      const details = event.result.details as any;
+      if (details.answers && details.answers.length > 0) {
+        const firstAnswer = String(details.answers[0].label ?? details.answers[0].id);
+        const name = `Q&A: ${firstAnswer}`;
+        ctx.sessionManager.setSessionName(name);
+      }
+    }
+  });
+
+  // ─── Slash Commands ──────────────────────────────────────────────────
+
+  pi.registerCommand("q-status", {
+    description: "Show questions extension usage statistics",
+    parameters: Type.Object({}),
+    async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
+      ctx.ui.notify("Questions extension: 3 tools registered (question, questionnaire, question_input)", "info");
+      return {
+        content: [{ type: "text", text: "Questions extension loaded with 3 tools: question, questionnaire, question_input" }],
+      };
+    },
+  });
+
+  pi.registerCommand("q-clear", {
+    description: "Clear any cached question state (if applicable)",
+    parameters: Type.Object({}),
+    async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
+      ctx.ui.notify("Question state cleared", "info");
+      return {
+        content: [{ type: "text", text: "Question state cleared successfully" }],
+      };
+    },
+  });
 }
