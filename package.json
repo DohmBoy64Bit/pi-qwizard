@@ -1,0 +1,30 @@
+{
+  "name": "pi-qwizard",
+  "version": "1.0.0",
+  "description": "Interactive question tools for Pi — single questions, multi-step questionnaires, and open-ended input",
+  "main": "./src/index.ts",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"No tests yet\" && exit 0"
+  },
+  "keywords": [
+    "pi-package",
+    "pi",
+    "questions",
+    "qna",
+    "wizard",
+    "questionnaire",
+    "interactive",
+    "tui"
+  ],
+  "author": "",
+  "license": "MIT",
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": ">=1.0.0"
+  },
+  "pi": {
+    "extensions": [
+      "./src/index.ts"
+    ]
+  }
+}
