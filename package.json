@@ -1,6 +1,6 @@
 {
   "name": "@dohmboy64bit/pi-qwizard",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Interactive question tools for Pi — single questions, multi-step questionnaires, and open-ended input",
   "main": "./src/index.ts",
   "type": "module",
