@@ -508,7 +508,9 @@ function registerQuestionTool(pi: ExtensionAPI) {
       const isMulti = params.type === "multi";
       const allOptions: DisplayOption[] = [
         ...params.options,
-        ...(allowOther ? [{ label: "Type something...", isOther: true }] : []),
+        ...(allowOther && params.options.length > 0
+          ? [{ label: "Type something...", isOther: true }]
+          : []),
       ];
 
       const result = await ctx.ui.custom<{
@@ -950,7 +952,7 @@ function registerQuestionnaireTool(pi: ExtensionAPI) {
             label: o.label,
             description: o.description,
           }));
-          if (q.allowOther) {
+          if (q.allowOther && q.options.length > 0) {
             opts.push({
               label: "Type something...",
               isOther: true,
@@ -1603,7 +1605,9 @@ function registerQuestionThrottleTool(pi: ExtensionAPI) {
         const isMulti = params.type === "multi";
         const allOptions = [
           ...params.options,
-          ...(params.allowOther !== false ? [{ label: "Type something...", isOther: true }] : []),
+          ...(params.allowOther !== false && params.options.length > 0
+            ? [{ label: "Type something...", isOther: true }]
+            : []),
         ];
 
         const editorTheme: EditorTheme = {
@@ -2031,7 +2035,7 @@ function registerQuestionBranchTool(pi: ExtensionAPI) {
             label: o.label,
             description: o.description,
           }));
-          if (q.allowOther) {
+          if (q.allowOther && q.options.length > 0) {
             opts.push({
               label: "Type something...",
               isOther: true,

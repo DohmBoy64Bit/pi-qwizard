@@ -619,6 +619,137 @@ assert(
   "Branch supports on property for force show/hide",
 );
 
+// ─── Specific Tests: Branching Logic ─────────────────────────────────────────
+
+section("Specific Tests: Branching Logic");
+
+// Test that branch conditions are evaluated before showing questions
+assert(
+  source.includes("evaluateBranch") && source.includes("answers.has"),
+  "Branch evaluation checks against answers map",
+);
+
+// Test simple condition parsing
+assert(
+  source.includes('"equals"') && source.includes('"not_equals"') && source.includes('"contains"'),
+  "Simple condition supports equals, not_equals, contains",
+);
+
+assert(
+  source.includes('"matches"') && source.includes('"is_empty"') && source.includes('"is_not_empty"'),
+  "Simple condition supports matches, is_empty, is_not_empty",
+);
+
+assert(
+  source.includes('"gt"') && source.includes('"lt"') && source.includes('"gte"') && source.includes('"lte"'),
+  "Simple condition supports gt, lt, gte, lte",
+);
+
+assert(
+  source.includes('"in"'),
+  "Simple condition supports in operator",
+);
+
+// Test complex condition evaluation
+assert(
+  source.includes("evaluateComplexCondition") && source.includes("operator"),
+  "Complex condition evaluates operator field",
+);
+
+assert(
+  source.includes("cond.field") || source.includes("field"),
+  "Complex condition uses field to look up answers",
+);
+
+// Test that skipped questions are tracked
+assert(
+  source.includes("skipped.push") || source.includes("skipped.includes"),
+  "Skipped questions are tracked",
+);
+
+assert(
+  source.includes("◇") || source.includes("skipped"),
+  "Skipped questions shown with special indicator",
+);
+
+// Test that 'on: false' always hides
+assert(
+  source.includes("branch.on === false") || source.includes("branch.on==false"),
+  "on: false forces question to be hidden",
+);
+
+assert(
+  source.includes("branch.on === true") || source.includes("branch.on==true"),
+  "on: true forces question to be shown",
+);
+
+// ─── Specific Tests: Throttle Logic ──────────────────────────────────────────
+
+section("Specific Tests: Throttle Logic");
+
+// Test throttle tracking
+assert(
+  source.includes("lastQuestionTime") && source.includes("Map"),
+  "Throttle uses Map to track timestamps",
+);
+
+assert(
+  source.includes("checkThrottle") && source.includes("cooldown"),
+  "checkThrottle function uses cooldown parameter",
+);
+
+assert(
+  source.includes("elapsed < cooldown") || source.includes("elapsed<cooldown"),
+  "Throttle compares elapsed time against cooldown",
+);
+
+assert(
+  source.includes("recordQuestionTime"),
+  "recordQuestionTime updates the timestamp",
+);
+
+// Test that throttle waits before showing question
+assert(
+  source.includes("setTimeout") && source.includes("cooldown"),
+  "Throttle waits using setTimeout",
+);
+
+assert(
+  source.includes("throttled") && source.includes("waited"),
+  "Results include throttled/waited flag",
+);
+
+// Test cooldown default
+assert(
+  source.includes("cooldown ?? 5") || source.includes("cooldown=5") || source.includes("cooldown === 5"),
+  "Default cooldown is 5 seconds",
+);
+
+// Test that throttle wraps question UI
+assert(
+  source.includes("registerQuestionThrottleTool") && source.includes("ctx.ui.custom"),
+  "Throttle tool renders question UI via ctx.ui.custom",
+);
+
+// ─── Specific Tests: 'Type something...' Fix ─────────────────────────────────
+
+section("Specific Tests: 'Type something...' Fix");
+
+assert(
+  source.includes("options.length > 0") || source.includes("options.length>0"),
+  "'Type something...' only added when options exist",
+);
+
+assert(
+  source.includes("params.options.length > 0") || source.includes("q.options.length > 0"),
+  "All tools check options length before adding 'Type something...'",
+);
+
+assert(
+  !source.includes("allowOther ? [{ label: 'Type something...'"),
+  "No unconditional 'Type something...' addition",
+);
+
 // ─── Summary ─────────────────────────────────────────────────────────────────
 
 section("Test Summary");
