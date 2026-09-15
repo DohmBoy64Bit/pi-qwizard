@@ -268,6 +268,18 @@ function recordQuestionTime(): void {
   lastQuestionTime.set("__global__", Date.now());
 }
 
+function clearQuestionTime(): void {
+  lastQuestionTime.delete("__global__");
+}
+
+// Auto-throttle settings (module-level, updated via slash commands)
+const autoThrottleSettings: AutoThrottleSettings = { enabled: true, cooldown: 3 };
+
+interface AutoThrottleSettings {
+  enabled: boolean;
+  cooldown: number;
+}
+
 // Branch evaluation
 function _evaluateBranch(
   branch: {
@@ -2553,9 +2565,14 @@ export default function (pi: ExtensionAPI) {
   // ─── Tool Events ───────────────────────────────────────────────────────
 
   pi.on("tool_call", async (event, _ctx) => {
-    // Log tool calls for debugging
-    if (TOOL_NAMES.has(event.toolName)) {
-      // Could track usage statistics or inject context
+    // Auto-throttle: enforce cooldown between question tools
+    if (autoThrottleSettings.enabled && TOOL_NAMES.has(event.toolName)) {
+      const throttleCheck = checkThrottle(autoThrottleSettings.cooldown);
+      if (throttleCheck.waited) {
+        const remaining = Math.ceil(autoThrottleSettings.cooldown - throttleCheck.elapsed);
+        // Brief wait - user won't notice the small delay
+        await new Promise((r) => setTimeout(r, (remaining + 0.1) * 1000));
+      }
     }
   });
 
@@ -2582,31 +2599,146 @@ export default function (pi: ExtensionAPI) {
 
   // ─── Slash Commands ──────────────────────────────────────────────────
 
-  pi.registerCommand("q-status", {
-    description: "Show questions extension usage statistics",
-    handler: async (_args, ctx) => {
-      ctx.ui.notify(
-        "Questions extension: 5 tools registered (question, questionnaire, question_input, question_throttle, question_branch)",
-        "info",
-      );
-      return {
-        content: [
-          {
-            type: "text",
-            text: "Questions extension loaded with 5 tools: question, questionnaire, question_input, question_throttle, question_branch",
-          },
-        ],
-      };
-    },
-  });
+  // Main /qwizard command
+  pi.registerCommand("qwizard", {
+    description: "Manage questions extension: status, auto-throttle, clear",
+    handler: async (args: string, ctx) => {
+      const parts = (args || "").trim().split(/\s+/);
+      const subcommand = parts[0]?.toLowerCase();
+      const arg1 = parts[1];
 
-  pi.registerCommand("q-clear", {
-    description: "Clear any cached question state (if applicable)",
-    handler: async (_args, ctx) => {
-      ctx.ui.notify("Question state cleared", "info");
-      return {
-        content: [{ type: "text", text: "Question state cleared successfully" }],
-      };
+      if (!subcommand || subcommand === "help" || subcommand === "") {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `
+qwizard - Questions extension management
+
+Usage: /qwizard [subcommand] [args]
+
+Subcommands:
+  help                    Show this help message
+  status                  Show extension status and settings
+  auto-throttle           Manage auto-throttle
+    on                    Enable auto-throttle
+    off                   Disable auto-throttle
+    <seconds>             Set cooldown (e.g., /qwizard auto-throttle 5)
+  clear                   Clear throttle state
+
+Settings:
+  Auto-throttle: ${autoThrottleSettings.enabled ? "enabled" : "disabled"}
+  Cooldown: ${autoThrottleSettings.cooldown}s
+  Tools: question, questionnaire, question_input, question_throttle, question_branch
+              `.trim(),
+            },
+          ],
+        };
+      }
+
+      switch (subcommand) {
+        case "status": {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `
+qwizard - Extension Status
+
+Tools: question, questionnaire, question_input, question_throttle, question_branch
+Auto-throttle: ${autoThrottleSettings.enabled ? "enabled" : "disabled"}
+Cooldown: ${autoThrottleSettings.cooldown}s
+              `.trim(),
+              },
+            ],
+          };
+        }
+
+        case "auto-throttle": {
+          if (!arg1) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `
+Auto-throttle - Current settings
+
+Status: ${autoThrottleSettings.enabled ? "enabled" : "disabled"}
+Cooldown: ${autoThrottleSettings.cooldown}s
+
+Usage:
+  /qwizard auto-throttle on    Enable auto-throttle
+  /qwizard auto-throttle off   Disable auto-throttle
+  /qwizard auto-throttle <N>   Set cooldown to N seconds
+              `.trim(),
+                },
+              ],
+            };
+          }
+
+          if (arg1 === "on") {
+            autoThrottleSettings.enabled = true;
+            ctx.ui.notify(
+              `Auto-throttle enabled (${autoThrottleSettings.cooldown}s cooldown)`,
+              "info",
+            );
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Auto-throttle enabled with ${autoThrottleSettings.cooldown}s cooldown`,
+                },
+              ],
+            };
+          }
+
+          if (arg1 === "off") {
+            autoThrottleSettings.enabled = false;
+            ctx.ui.notify("Auto-throttle disabled", "info");
+            return {
+              content: [{ type: "text", text: "Auto-throttle disabled" }],
+            };
+          }
+
+          // Try to parse as number
+          const cooldown = parseInt(arg1, 10);
+          if (!isNaN(cooldown) && cooldown > 0 && cooldown <= 60) {
+            autoThrottleSettings.cooldown = cooldown;
+            ctx.ui.notify(`Cooldown set to ${cooldown}s`, "info");
+            return {
+              content: [{ type: "text", text: `Cooldown set to ${cooldown}s` }],
+            };
+          }
+
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Invalid argument. Use: on, off, or a number (1-60)`,
+              },
+            ],
+          };
+        }
+
+        case "clear": {
+          clearQuestionTime();
+          ctx.ui.notify("Throttle state cleared", "info");
+          return {
+            content: [{ type: "text", text: "Throttle state cleared" }],
+          };
+        }
+
+        default: {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Unknown subcommand: ${subcommand}. Use /qwizard help for usage.`,
+              },
+            ],
+          };
+        }
+      }
     },
   });
 }

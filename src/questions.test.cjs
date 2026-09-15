@@ -169,26 +169,31 @@ assert(
 
 // ─── Test 8: Slash Commands ──────────────────────────────────────────────────
 
-section("Test 8: Slash Commands (q-status, q-clear)");
+section("Test 8: Slash Commands (/qwizard)");
 
 assert(
-  source.includes('pi.registerCommand("q-status"'),
-  "q-status command is registered",
+  source.includes('pi.registerCommand("qwizard"'),
+  "qwizard command is registered",
 );
 
 assert(
-  source.includes('pi.registerCommand("q-clear"'),
-  "q-clear command is registered",
+  source.includes('description: "Manage questions extension: status, auto-throttle, clear"'),
+  "qwizard has description",
 );
 
 assert(
-  source.includes('description: "Show questions extension usage statistics"'),
-  "q-status has description",
+  source.includes('subcommand === "help"') || source.includes('subcommand === "status"'),
+  "qwizard has subcommand handling",
 );
 
 assert(
-  source.includes('description: "Clear any cached question state') || source.includes('Clear any cached question'),
-  "q-clear has description",
+  source.includes('auto-throttle') || source.includes('autoThrottle'),
+  "qwizard has auto-throttle subcommand",
+);
+
+assert(
+  source.includes('case "clear"') || source.includes('clearQuestionTime'),
+  "qwizard has clear subcommand",
 );
 
 // ─── Test 9: pi.events Inter-Extension Communication ─────────────────────────

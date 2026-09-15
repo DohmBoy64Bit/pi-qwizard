@@ -541,6 +541,42 @@ Same as `questionnaire` — tab bar with progress indicator, **Tab / →** to sw
 | `branch.on` | `boolean` | — | Force show (`true`) or hide (`false`) |
 | `type` | `"single" \| "multi" \| "yes_no" \| "rating"` | `"single"` | Question type |
 
+## Auto-Throttle
+
+The extension includes automatic throttling between question tools to prevent rapid-fire prompts. This is enabled by default.
+
+### Configuration
+
+Auto-throttle settings are managed via slash commands:
+
+```
+/qwizard auto-throttle on     # Enable auto-throttle
+/qwizard auto-throttle off    # Disable auto-throttle
+/qwizard auto-throttle 5      # Set cooldown to 5 seconds
+/qwizard status               # Show current settings
+/qwizard clear                # Clear throttle state
+```
+
+### Settings via settings.json
+
+You can also configure auto-throttle in your `settings.json`:
+
+```json
+{
+  "qwizard": {
+    "autoThrottle": {
+      "enabled": true,
+      "cooldown": 3
+    }
+  }
+}
+```
+
+| Setting | Type | Default | Description |
+| --- | --- | --- | --- |
+| `qwizard.autoThrottle.enabled` | `boolean` | `true` | Enable/disable auto-throttle |
+| `qwizard.autoThrottle.cooldown` | `number` | `3` | Cooldown in seconds (1-60) |
+
 ## License
 
 MIT
