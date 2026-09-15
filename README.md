@@ -213,6 +213,13 @@ Or add to your `settings.json`:
 pi install ./path/to/pi-qwizard
 ```
 
+Or add to your `settings.json`:
+
+```json
+{
+  "packages": ["./path/to/pi-qwizard"]
+}
+
 ## API Reference
 
 ### `question` Parameters
