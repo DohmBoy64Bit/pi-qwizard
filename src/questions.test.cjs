@@ -1,8 +1,8 @@
 /**
  * Questions Extension - Comprehensive Test Suite
  *
- * Tests all 3 tools (question, questionnaire, question_input) with 100% coverage.
- * Tests all 11 improvements via source code analysis.
+ * Tests all 5 tools (question, questionnaire, question_input, question_throttle, question_branch)
+ * Tests all features via source code analysis.
  */
 
 const fs = require("fs");
@@ -73,10 +73,10 @@ assert(
 section("Test 2: promptSnippet and promptGuidelines");
 
 const promptSnippetCount = (source.match(/promptSnippet:/g) || []).length;
-assert(promptSnippetCount === 3, "All 3 tools have promptSnippet (found " + promptSnippetCount + ")");
+assert(promptSnippetCount === 5, "All 5 tools have promptSnippet (found " + promptSnippetCount + ")");
 
 const promptGuidelinesCount = (source.match(/promptGuidelines:/g) || []).length;
-assert(promptGuidelinesCount === 3, "All 3 tools have promptGuidelines (found " + promptGuidelinesCount + ")");
+assert(promptGuidelinesCount === 5, "All 5 tools have promptGuidelines (found " + promptGuidelinesCount + ")");
 
 assert(
   source.includes('promptSnippet: "Ask the user a single question'),
@@ -98,7 +98,7 @@ assert(
 section("Test 3: executionMode: sequential on All Tools");
 
 const executionModeCount = (source.match(/executionMode: "sequential"/g) || []).length;
-assert(executionModeCount === 3, "All 3 tools have executionMode: sequential (found " + executionModeCount + ")");
+assert(executionModeCount === 5, "All 5 tools have executionMode: sequential (found " + executionModeCount + ")");
 
 // ─── Test 4: Event Subscription ──────────────────────────────────────────────
 
@@ -134,7 +134,7 @@ assert(
 section("Test 5: prepareArguments for Session Resume Compatibility");
 
 const prepareArgsCount = (source.match(/prepareArguments\(/g) || []).length;
-assert(prepareArgsCount === 3, "All 3 tools have prepareArguments (found " + prepareArgsCount + ")");
+assert(prepareArgsCount === 5, "All 5 tools have prepareArguments (found " + prepareArgsCount + ")");
 
 assert(
   source.includes("prepareArguments") && source.includes("return args"),
@@ -307,13 +307,13 @@ assert(
 section("Tool Execution Mode Tests");
 
 const executeCount = (source.match(/execute\(/g) || []).length;
-assert(executeCount >= 3, "All 3 tools have execute functions (found " + executeCount + " execute calls)");
+assert(executeCount >= 5, "All 5 tools have execute functions (found " + executeCount + " execute calls)");
 
 const renderCallCount = (source.match(/renderCall\(/g) || []).length;
-assert(renderCallCount === 3, "All 3 tools have renderCall functions (found " + renderCallCount + ")");
+assert(renderCallCount === 5, "All 5 tools have renderCall functions (found " + renderCallCount + ")");
 
 const renderResultCount = (source.match(/renderResult\(/g) || []).length;
-assert(renderResultCount === 3, "All 3 tools have renderResult functions (found " + renderResultCount + ")");
+assert(renderResultCount === 5, "All 5 tools have renderResult functions (found " + renderResultCount + ")");
 
 // ─── Validation Logic Tests ──────────────────────────────────────────────────
 
@@ -504,6 +504,119 @@ assert(
 assert(
   source.includes("wasCustom"),
   "Results track whether custom text was entered",
+);
+
+// ─── New Tool: question_throttle Tests ───────────────────────────────────────
+
+section("New Tool: question_throttle");
+
+assert(
+  source.includes('name: "question_throttle"'),
+  "question_throttle tool is registered",
+);
+
+assert(
+  source.includes("registerQuestionThrottleTool"),
+  "registerQuestionThrottleTool function exists",
+);
+
+assert(
+  source.includes("cooldown"),
+  "question_throttle has cooldown parameter",
+);
+
+assert(
+  source.includes("checkThrottle"),
+  "Throttle check function is defined",
+);
+
+assert(
+  source.includes("lastQuestionTime"),
+  "Global timestamp tracking exists",
+);
+
+assert(
+  source.includes("recordQuestionTime"),
+  "Question time recording function exists",
+);
+
+assert(
+  source.includes("throttled"),
+  "Results include throttled flag",
+);
+
+assert(
+  source.includes("question_throttle_result"),
+  "question_throttle_result message renderer registered",
+);
+
+// ─── New Tool: question_branch Tests ─────────────────────────────────────────
+
+section("New Tool: question_branch");
+
+assert(
+  source.includes('name: "question_branch"'),
+  "question_branch tool is registered",
+);
+
+assert(
+  source.includes("registerQuestionBranchTool"),
+  "registerQuestionBranchTool function exists",
+);
+
+assert(
+  source.includes("evaluateBranch"),
+  "Branch evaluation function is defined",
+);
+
+assert(
+  source.includes("evaluateSimpleCondition"),
+  "Simple condition evaluation function exists",
+);
+
+assert(
+  source.includes("evaluateComplexCondition"),
+  "Complex condition evaluation function exists",
+);
+
+assert(
+  source.includes("equals") && source.includes("not_equals") && source.includes("contains"),
+  "Branch supports equals, not_equals, contains operators",
+);
+
+assert(
+  source.includes("matches") && source.includes("is_empty") && source.includes("is_not_empty"),
+  "Branch supports matches, is_empty, is_not_empty operators",
+);
+
+assert(
+  source.includes("gt") && source.includes("lt") && source.includes("gte") && source.includes("lte"),
+  "Branch supports gt, lt, gte, lte operators",
+);
+
+assert(
+  source.includes("in"),
+  "Branch supports in operator",
+);
+
+assert(
+  source.includes("question_branch_result"),
+  "question_branch_result message renderer registered",
+);
+
+assert(
+  source.includes("skipped"),
+  "Branch results track skipped questions",
+);
+
+assert(
+  source.includes("branch"),
+  "Branch schema includes branch property",
+);
+
+assert(
+  source.includes("on:"),
+  "Branch supports on property for force show/hide",
 );
 
 // ─── Summary ─────────────────────────────────────────────────────────────────

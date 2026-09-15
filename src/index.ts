@@ -191,7 +191,7 @@ const QuestionThrottleParams = Type.Object({
 
 // ─── Branch Schema ───────────────────────────────────────────────────────────
 
-const BranchConditionSchema = Type.String({
+const _BranchConditionSchema = Type.String({
   description:
     "Condition expression like 'field_id equals value'. Also supports object { field, operator, value }",
 });
@@ -269,8 +269,14 @@ function recordQuestionTime(): void {
 }
 
 // Branch evaluation
-function evaluateBranch(
-  branch: { when: string | { field: string; operator?: string; value?: unknown } | Array<string | { field: string; operator?: string; value?: unknown }>; on?: boolean },
+function _evaluateBranch(
+  branch: {
+    when:
+      | string
+      | { field: string; operator?: string; value?: unknown }
+      | Array<string | { field: string; operator?: string; value?: unknown }>;
+    on?: boolean;
+  },
   answers: Map<string, { value: string | string[]; label: string | string[] }>,
 ): boolean {
   // If 'on' is explicitly set, use it
@@ -291,9 +297,14 @@ function evaluateBranch(
   });
 }
 
-function evaluateSimpleCondition(expr: string, answers: Map<string, { value: string | string[] }>): boolean {
+function evaluateSimpleCondition(
+  expr: string,
+  answers: Map<string, { value: string | string[] }>,
+): boolean {
   // Parse: "field_id operator value"
-  const match = expr.match(/^(.+?)\s+(equals|not_equals|contains|matches|in|is_empty|is_not_empty|gt|lt|gte|lte)\s+(.+)$/);
+  const match = expr.match(
+    /^(.+?)\s+(equals|not_equals|contains|matches|in|is_empty|is_not_empty|gt|lt|gte|lte)\s+(.+)$/,
+  );
   if (!match) return true; // Invalid format, pass through
 
   const [, field, operator, value] = match;
@@ -317,7 +328,10 @@ function evaluateSimpleCondition(expr: string, answers: Map<string, { value: str
         return false;
       }
     case "in":
-      return value.split(", ").map((v) => v.trim()).includes(answerStr);
+      return value
+        .split(", ")
+        .map((v) => v.trim())
+        .includes(answerStr);
     case "is_empty":
       return answerStr === "" || answerStr === "(no response)";
     case "is_not_empty":
@@ -706,10 +720,7 @@ function registerQuestionTool(pi: ExtensionAPI) {
                 theme.fg("dim", "↑↓ navigate • Enter toggle • Enter submit • Esc submit selected"),
               );
             } else {
-              addWrappedWithPrefix(
-                " ",
-                theme.fg("dim", "↑↓ navigate • Enter toggle • Esc cancel"),
-              );
+              addWrappedWithPrefix(" ", theme.fg("dim", "↑↓ navigate • Enter toggle • Esc cancel"));
             }
           } else {
             addWrappedWithPrefix(
@@ -1546,6 +1557,15 @@ function registerQuestionThrottleTool(pi: ExtensionAPI) {
     parameters: QuestionThrottleParams,
     executionMode: "sequential",
 
+    prepareArguments(args) {
+      if (!args || typeof args !== "object") return args;
+      const input = args as Record<string, unknown>;
+      if (typeof input.question === "string") {
+        return input;
+      }
+      return args;
+    },
+
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       if (ctx.mode !== "tui") {
         return errorResult("Error: UI not available (running in non-interactive mode)", {
@@ -1581,7 +1601,10 @@ function registerQuestionThrottleTool(pi: ExtensionAPI) {
         let justToggled = false;
         let toggleTimeout: ReturnType<typeof setTimeout> | null = null;
         const isMulti = params.type === "multi";
-        const allOptions = [...params.options, ...(params.allowOther !== false ? [{ label: "Type something...", isOther: true }] : [])];
+        const allOptions = [
+          ...params.options,
+          ...(params.allowOther !== false ? [{ label: "Type something...", isOther: true }] : []),
+        ];
 
         const editorTheme: EditorTheme = {
           borderColor: (s) => theme.fg("accent", s),
@@ -1777,10 +1800,7 @@ function registerQuestionThrottleTool(pi: ExtensionAPI) {
                 theme.fg("dim", "↑↓ navigate • Enter toggle • Enter submit • Esc submit selected"),
               );
             } else {
-              addWrappedWithPrefix(
-                " ",
-                theme.fg("dim", "↑↓ navigate • Enter toggle • Esc cancel"),
-              );
+              addWrappedWithPrefix(" ", theme.fg("dim", "↑↓ navigate • Enter toggle • Esc cancel"));
             }
           } else {
             addWrappedWithPrefix(
@@ -1852,7 +1872,8 @@ function registerQuestionThrottleTool(pi: ExtensionAPI) {
     },
 
     renderCall(args, theme, _context) {
-      let text = theme.fg("toolTitle", theme.bold("question_throttle ")) + theme.fg("muted", args.question);
+      let text =
+        theme.fg("toolTitle", theme.bold("question_throttle ")) + theme.fg("muted", args.question);
       const cooldown = args.cooldown ?? 5;
       text += `\n${theme.fg("dim", `  Cooldown: ${cooldown}s`)}`;
       const opts = Array.isArray(args.options) ? args.options : [];
@@ -1904,6 +1925,15 @@ function registerQuestionBranchTool(pi: ExtensionAPI) {
     ],
     parameters: QuestionBranchParams,
     executionMode: "sequential",
+
+    prepareArguments(args) {
+      if (!args || typeof args !== "object") return args;
+      const input = args as Record<string, unknown>;
+      if (Array.isArray(input.questions)) {
+        return input;
+      }
+      return args;
+    },
 
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       if (ctx.mode !== "tui") {
@@ -2175,7 +2205,9 @@ function registerQuestionBranchTool(pi: ExtensionAPI) {
           lines.push(theme.fg("accent", "─".repeat(renderWidth)));
 
           if (isMulti) {
-            const answeredCount = processedQuestions.filter((q) => answers.has(q.id) || skipped.includes(q.id)).length;
+            const answeredCount = processedQuestions.filter(
+              (q) => answers.has(q.id) || skipped.includes(q.id),
+            ).length;
             const percentage = formatPercentage(answeredCount, processedQuestions.length);
 
             // Progress bar
@@ -2202,9 +2234,10 @@ function registerQuestionBranchTool(pi: ExtensionAPI) {
             }
             const canSubmit = allRequiredAnswered();
             const submitText = " ✓ Submit ";
-            const submitStyled = currentTab === processedQuestions.length
-              ? theme.bg("selectedBg", theme.fg("text", submitText))
-              : theme.fg(canSubmit ? "success" : "dim", submitText);
+            const submitStyled =
+              currentTab === processedQuestions.length
+                ? theme.bg("selectedBg", theme.fg("text", submitText))
+                : theme.fg(canSubmit ? "success" : "dim", submitText);
             tabs.push(`${submitStyled} →`);
             addWrappedWithPrefix(" ", tabs.join(""));
             lines.push("");
@@ -2333,7 +2366,13 @@ function registerQuestionBranchTool(pi: ExtensionAPI) {
     },
 
     renderCall(args, theme, _context) {
-      const qs = (args.questions as Array<{ id: string; label?: string; prompt: string; branch?: unknown }>) || [];
+      const qs =
+        (args.questions as Array<{
+          id: string;
+          label?: string;
+          prompt: string;
+          branch?: unknown;
+        }>) || [];
       const count = qs.length;
       const labels = qs.map((q) => q.label || q.id).join(", ");
       const hasBranch = qs.some((q) => q.branch !== undefined);
@@ -2377,7 +2416,13 @@ function registerQuestionBranchTool(pi: ExtensionAPI) {
 
 // ─── Extension Entry Point ──────────────────────────────────────────────────
 
-const TOOL_NAMES = new Set(["question", "questionnaire", "question_input", "question_throttle", "question_branch"]);
+const TOOL_NAMES = new Set([
+  "question",
+  "questionnaire",
+  "question_input",
+  "question_throttle",
+  "question_branch",
+]);
 
 export default function (pi: ExtensionAPI) {
   registerQuestionTool(pi);
