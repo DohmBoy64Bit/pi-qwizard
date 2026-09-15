@@ -196,18 +196,6 @@ const _BranchConditionSchema = Type.String({
     "Condition expression like 'field_id equals value'. Also supports object { field, operator, value }",
 });
 
-const BranchSchema = Type.Object({
-  when: Type.Optional(
-    Type.String({
-      description:
-        "Condition(s): string 'field_id equals value'. Also supports object {field, operator, value} or array.",
-    }),
-  ),
-  on: Type.Optional(
-    Type.Boolean({ description: "If true, always show; if false, always hide (overrides when)" }),
-  ),
-});
-
 const QuestionBranchParams = Type.Object({
   questions: Type.Array(
     Type.Object({
@@ -236,10 +224,40 @@ const QuestionBranchParams = Type.Object({
           description: "Auto-advance to next question after selection (default: true)",
         }),
       ),
-      branch: Type.Optional(BranchSchema, {
-        description:
-          "Conditional visibility: show/hide based on previous answers. Supports 'when' condition and 'on' override.",
-      }),
+      when: Type.Optional(
+        Type.Union([
+          Type.String({
+            description:
+              "Condition expression: 'field_id equals value'. Also supports object {field, operator, value} or array.",
+          }),
+          Type.Object({
+            field: Type.String({ description: "Answer field to check" }),
+            operator: Type.Optional(
+              Type.String({ description: "Comparison operator (default: equals)" }),
+            ),
+            value: Type.Unknown({ description: "Value to compare against" }),
+          }),
+          Type.Array(
+            Type.Union([
+              Type.String(),
+              Type.Object({
+                field: Type.String(),
+                operator: Type.Optional(Type.String()),
+                value: Type.Unknown(),
+              }),
+            ]),
+          ),
+        ]),
+        {
+          description:
+            "Conditional visibility: show/hide based on previous answers. Supports 'when' condition and 'on' override.",
+        },
+      ),
+      on: Type.Optional(
+        Type.Boolean({
+          description: "If true, always show; if false, always hide (overrides when)",
+        }),
+      ),
       type: Type.Optional(StringEnum(["single", "multi", "yes_no", "rating"] as const), {
         description: "Question type: single, multi, yes_no, or rating (default: single)",
       }),
@@ -1594,55 +1612,9 @@ function registerQuestionThrottleTool(pi: ExtensionAPI) {
       const throttleCheck = checkThrottle(cooldown);
       const wasThrottled = throttleCheck.waited;
 
-      // Wait and show notification if throttled
+      // Wait if throttled
       if (wasThrottled) {
         const remaining = Math.ceil(cooldown - throttleCheck.elapsed);
-        ctx.ui.custom<string | null>(
-          (tui, theme, _kb, done) => {
-            let cachedLines: string[] | undefined;
-
-            function refresh() {
-              cachedLines = undefined;
-              tui.requestRender();
-            }
-
-            function handleInput(data: string) {
-              if (matchesKey(data, Key.escape)) {
-                done(null);
-                return;
-              }
-            }
-
-            function render(width: number): string[] {
-              if (cachedLines) return cachedLines;
-              const lines: string[] = [];
-              const renderWidth = Math.max(1, width);
-              function addWrapped(text: string) {
-                lines.push(...wrapTextWithAnsi(text, renderWidth));
-              }
-              lines.push(theme.fg("accent", "─".repeat(renderWidth)));
-              lines.push("");
-              addWrapped(theme.fg("warning", `⏳ Throttled — waiting ${remaining}s`));
-              lines.push("");
-              addWrapped(theme.fg("dim", "Please wait..."));
-              lines.push("");
-              addWrapped(theme.fg("dim", "Esc to skip wait"));
-              lines.push("");
-              lines.push(theme.fg("accent", "─".repeat(renderWidth)));
-              cachedLines = lines;
-              return lines;
-            }
-
-            return {
-              render,
-              invalidate: () => {
-                cachedLines = undefined;
-              },
-              handleInput,
-            };
-          },
-          { overlay: true },
-        );
         await new Promise((r) => setTimeout(r, (remaining + 0.5) * 1000));
       }
 
@@ -2044,8 +2016,30 @@ function registerQuestionBranchTool(pi: ExtensionAPI) {
         return base;
       });
 
+      // Runtime branch evaluation helper
+      function evaluateBranchCondition(
+        when: string | object | object[] | undefined,
+        on: boolean | undefined,
+        answers: Map<string, { value: string | string[] }>,
+      ): boolean {
+        if (on === false) return false;
+        if (on === true) return true;
+        if (!when) return true;
+
+        const conditions = Array.isArray(when) ? when : [when];
+        const answerMap = new Map<string, { value: string | string[] }>();
+        for (const [k, v] of answers) {
+          answerMap.set(k, v);
+        }
+
+        return conditions.every((cond) => {
+          if (typeof cond === "string") return evaluateSimpleCondition(cond, answerMap);
+          if (typeof cond === "object") return evaluateComplexCondition(cond, answerMap);
+          return true;
+        });
+      }
+
       const isMulti = processedQuestions.length > 1;
-      const totalTabs = processedQuestions.length + 1;
 
       const result = await ctx.ui.custom<QuestionBranchResult>((tui, theme, _kb, done) => {
         let currentTab = 0;
@@ -2055,7 +2049,6 @@ function registerQuestionBranchTool(pi: ExtensionAPI) {
         let cachedLines: string[] | undefined;
         const answers = new Map<string, QuestionBranchResult["answers"][number]>();
         const selectedIndices = new Set<number>();
-        const skipped: string[] = [];
 
         const editorTheme: EditorTheme = {
           borderColor: (s) => theme.fg("accent", s),
@@ -2091,6 +2084,29 @@ function registerQuestionBranchTool(pi: ExtensionAPI) {
           return processedQuestions[currentTab];
         }
 
+        function isQuestionVisible(idx: number): boolean {
+          const q = processedQuestions[idx];
+          if (!q) return true;
+          return evaluateBranchCondition(q.when, q.on, answers);
+        }
+
+        function markSkippedIfNeeded() {
+          const q = processedQuestions[currentTab];
+          if (q && !isQuestionVisible(currentTab) && !skipped.includes(q.id)) {
+            skipped.push(q.id);
+          }
+        }
+
+        function skipToNextVisible() {
+          while (currentTab < processedQuestions.length) {
+            if (isQuestionVisible(currentTab)) {
+              return;
+            }
+            skipped.push(processedQuestions[currentTab].id);
+            currentTab++;
+          }
+        }
+
         function currentOptions(): DisplayOption[] {
           const q = currentQuestion();
           if (!q) return [];
@@ -2108,7 +2124,10 @@ function registerQuestionBranchTool(pi: ExtensionAPI) {
         }
 
         function allRequiredAnswered(): boolean {
-          return processedQuestions.every((q) => !q.required || answers.has(q.id));
+          // All non-skipped questions must be answered
+          return processedQuestions.every(
+            (q) => !q.required || answers.has(q.id) || skipped.includes(q.id),
+          );
         }
 
         function advanceAfterAnswer() {
@@ -2117,12 +2136,8 @@ function registerQuestionBranchTool(pi: ExtensionAPI) {
             submit(false);
             return;
           }
-          // Find next visible question
-          if (currentTab < processedQuestions.length - 1) {
-            currentTab++;
-          } else {
-            currentTab = processedQuestions.length;
-          }
+          // Skip questions whose branch conditions aren't met
+          skipToNextVisible();
           optionIndex = 0;
           refresh();
         }
@@ -2172,13 +2187,31 @@ function registerQuestionBranchTool(pi: ExtensionAPI) {
 
           if (isMulti) {
             if (matchesKey(data, Key.tab) || matchesKey(data, Key.right)) {
-              currentTab = (currentTab + 1) % totalTabs;
+              // Mark current as skipped if its branch condition isn't met
+              markSkippedIfNeeded();
+              // Move to next tab
+              if (currentTab < processedQuestions.length - 1) {
+                currentTab++;
+              } else {
+                currentTab = processedQuestions.length;
+              }
+              // Skip non-visible questions
+              skipToNextVisible();
               optionIndex = 0;
               refresh();
               return;
             }
             if (matchesKey(data, Key.shift("tab")) || matchesKey(data, Key.left)) {
-              currentTab = (currentTab - 1 + totalTabs) % totalTabs;
+              // Mark current as skipped if its branch condition isn't met
+              markSkippedIfNeeded();
+              // Move to previous tab
+              if (currentTab > 0) {
+                currentTab--;
+              } else {
+                currentTab = processedQuestions.length;
+              }
+              // Skip non-visible questions
+              skipToNextVisible();
               optionIndex = 0;
               refresh();
               return;
@@ -2286,8 +2319,11 @@ function registerQuestionBranchTool(pi: ExtensionAPI) {
             lines.push("");
 
             const tabs: string[] = ["← "];
+            // currentTab now indexes directly into processedQuestions
+            const activeProcessedIndex = currentTab < processedQuestions.length ? currentTab : -1;
+
             for (let i = 0; i < processedQuestions.length; i++) {
-              const isActive = i === currentTab;
+              const isActive = i === activeProcessedIndex;
               const isAnswered = answers.has(processedQuestions[i].id);
               const isSkipped = skipped.includes(processedQuestions[i].id);
               const lbl = processedQuestions[i].label;
@@ -2438,11 +2474,11 @@ function registerQuestionBranchTool(pi: ExtensionAPI) {
           id: string;
           label?: string;
           prompt: string;
-          branch?: unknown;
+          when?: unknown;
         }>) || [];
       const count = qs.length;
       const labels = qs.map((q) => q.label || q.id).join(", ");
-      const hasBranch = qs.some((q) => q.branch !== undefined);
+      const hasBranch = qs.some((q) => q.when !== undefined);
       let text =
         theme.fg("toolTitle", theme.bold("question_branch ")) +
         theme.fg("muted", `${count} question${count !== 1 ? "s" : ""}`);
@@ -2608,72 +2644,29 @@ export default function (pi: ExtensionAPI) {
       const arg1 = parts[1];
 
       if (!subcommand || subcommand === "help" || subcommand === "") {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `
-qwizard - Questions extension management
-
-Usage: /qwizard [subcommand] [args]
-
-Subcommands:
-  help                    Show this help message
-  status                  Show extension status and settings
-  auto-throttle           Manage auto-throttle
-    on                    Enable auto-throttle
-    off                   Disable auto-throttle
-    <seconds>             Set cooldown (e.g., /qwizard auto-throttle 5)
-  clear                   Clear throttle state
-
-Settings:
-  Auto-throttle: ${autoThrottleSettings.enabled ? "enabled" : "disabled"}
-  Cooldown: ${autoThrottleSettings.cooldown}s
-  Tools: question, questionnaire, question_input, question_throttle, question_branch
-              `.trim(),
-            },
-          ],
-        };
+        ctx.ui.notify(
+          `qwizard - Questions extension management\n\nUsage: /qwizard [subcommand] [args]\n\nSubcommands:\n  help                    Show this help message\n  status                  Show extension status and settings\n  auto-throttle           Manage auto-throttle\n    on                    Enable auto-throttle\n    off                   Disable auto-throttle\n    <seconds>             Set cooldown (e.g., /qwizard auto-throttle 5)\n  clear                   Clear throttle state\n\nSettings:\n  Auto-throttle: ${autoThrottleSettings.enabled ? "enabled" : "disabled"}\n  Cooldown: ${autoThrottleSettings.cooldown}s\n  Tools: question, questionnaire, question_input, question_throttle, question_branch`,
+          "info",
+        );
+        return;
       }
 
       switch (subcommand) {
         case "status": {
-          return {
-            content: [
-              {
-                type: "text",
-                text: `
-qwizard - Extension Status
-
-Tools: question, questionnaire, question_input, question_throttle, question_branch
-Auto-throttle: ${autoThrottleSettings.enabled ? "enabled" : "disabled"}
-Cooldown: ${autoThrottleSettings.cooldown}s
-              `.trim(),
-              },
-            ],
-          };
+          ctx.ui.notify(
+            `qwizard - Extension Status\n\nTools: question, questionnaire, question_input, question_throttle, question_branch\nAuto-throttle: ${autoThrottleSettings.enabled ? "enabled" : "disabled"}\nCooldown: ${autoThrottleSettings.cooldown}s`,
+            "info",
+          );
+          return;
         }
 
         case "auto-throttle": {
           if (!arg1) {
-            return {
-              content: [
-                {
-                  type: "text",
-                  text: `
-Auto-throttle - Current settings
-
-Status: ${autoThrottleSettings.enabled ? "enabled" : "disabled"}
-Cooldown: ${autoThrottleSettings.cooldown}s
-
-Usage:
-  /qwizard auto-throttle on    Enable auto-throttle
-  /qwizard auto-throttle off   Disable auto-throttle
-  /qwizard auto-throttle <N>   Set cooldown to N seconds
-              `.trim(),
-                },
-              ],
-            };
+            ctx.ui.notify(
+              `Auto-throttle - Current settings\n\nStatus: ${autoThrottleSettings.enabled ? "enabled" : "disabled"}\nCooldown: ${autoThrottleSettings.cooldown}s\n\nUsage:\n  /qwizard auto-throttle on    Enable auto-throttle\n  /qwizard auto-throttle off   Disable auto-throttle\n  /qwizard auto-throttle <N>   Set cooldown to N seconds`,
+              "info",
+            );
+            return;
           }
 
           if (arg1 === "on") {
@@ -2682,22 +2675,13 @@ Usage:
               `Auto-throttle enabled (${autoThrottleSettings.cooldown}s cooldown)`,
               "info",
             );
-            return {
-              content: [
-                {
-                  type: "text",
-                  text: `Auto-throttle enabled with ${autoThrottleSettings.cooldown}s cooldown`,
-                },
-              ],
-            };
+            return;
           }
 
           if (arg1 === "off") {
             autoThrottleSettings.enabled = false;
             ctx.ui.notify("Auto-throttle disabled", "info");
-            return {
-              content: [{ type: "text", text: "Auto-throttle disabled" }],
-            };
+            return;
           }
 
           // Try to parse as number
@@ -2705,38 +2689,25 @@ Usage:
           if (!isNaN(cooldown) && cooldown > 0 && cooldown <= 60) {
             autoThrottleSettings.cooldown = cooldown;
             ctx.ui.notify(`Cooldown set to ${cooldown}s`, "info");
-            return {
-              content: [{ type: "text", text: `Cooldown set to ${cooldown}s` }],
-            };
+            return;
           }
 
-          return {
-            content: [
-              {
-                type: "text",
-                text: `Invalid argument. Use: on, off, or a number (1-60)`,
-              },
-            ],
-          };
+          ctx.ui.notify("Invalid argument. Use: on, off, or a number (1-60)", "warning");
+          return;
         }
 
         case "clear": {
           clearQuestionTime();
           ctx.ui.notify("Throttle state cleared", "info");
-          return {
-            content: [{ type: "text", text: "Throttle state cleared" }],
-          };
+          return;
         }
 
         default: {
-          return {
-            content: [
-              {
-                type: "text",
-                text: `Unknown subcommand: ${subcommand}. Use /qwizard help for usage.`,
-              },
-            ],
-          };
+          ctx.ui.notify(
+            `Unknown subcommand: ${subcommand}. Use /qwizard help for usage.`,
+            "warning",
+          );
+          return;
         }
       }
     },

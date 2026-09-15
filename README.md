@@ -536,9 +536,8 @@ Same as `questionnaire` — tab bar with progress indicator, **Tab / →** to sw
 | `allowOther` | `boolean` | `true` | Include the **"Type something..."** option |
 | `required` | `boolean` | `true` | Must be answered before submit |
 | `autoAdvance` | `boolean` | `true` | Auto-advance after selection |
-| `branch` | `object` | — | Conditional visibility: `{ when, on }` |
-| `branch.when` | `string \| object` | — | Condition expression (see operators below) |
-| `branch.on` | `boolean` | — | Force show (`true`) or hide (`false`) |
+| `when` | `string \| object \| array` | — | Condition expression (string, object with `{field, operator, value}`, or array). See operators below. |
+| `on` | `boolean` | — | Force show (`true`) or hide (`false`), overrides `when` |
 | `type` | `"single" \| "multi" \| "yes_no" \| "rating"` | `"single"` | Question type |
 
 ## Auto-Throttle
