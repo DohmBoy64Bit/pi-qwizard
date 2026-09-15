@@ -1580,11 +1580,57 @@ function registerQuestionThrottleTool(pi: ExtensionAPI) {
 
       const cooldown = params.cooldown ?? 5;
       const throttleCheck = checkThrottle(cooldown);
+      const wasThrottled = throttleCheck.waited;
 
-      // Brief wait message if throttled
-      if (throttleCheck.waited) {
+      // Wait and show notification if throttled
+      if (wasThrottled) {
         const remaining = Math.ceil(cooldown - throttleCheck.elapsed);
-        // Wait silently - the cooldown ensures spacing
+        ctx.ui.custom<string | null>(
+          (tui, theme, _kb, done) => {
+            let cachedLines: string[] | undefined;
+
+            function refresh() {
+              cachedLines = undefined;
+              tui.requestRender();
+            }
+
+            function handleInput(data: string) {
+              if (matchesKey(data, Key.escape)) {
+                done(null);
+                return;
+              }
+            }
+
+            function render(width: number): string[] {
+              if (cachedLines) return cachedLines;
+              const lines: string[] = [];
+              const renderWidth = Math.max(1, width);
+              function addWrapped(text: string) {
+                lines.push(...wrapTextWithAnsi(text, renderWidth));
+              }
+              lines.push(theme.fg("accent", "─".repeat(renderWidth)));
+              lines.push("");
+              addWrapped(theme.fg("warning", `⏳ Throttled — waiting ${remaining}s`));
+              lines.push("");
+              addWrapped(theme.fg("dim", "Please wait..."));
+              lines.push("");
+              addWrapped(theme.fg("dim", "Esc to skip wait"));
+              lines.push("");
+              lines.push(theme.fg("accent", "─".repeat(renderWidth)));
+              cachedLines = lines;
+              return lines;
+            }
+
+            return {
+              render,
+              invalidate: () => {
+                cachedLines = undefined;
+              },
+              handleInput,
+            };
+          },
+          { overlay: true },
+        );
         await new Promise((r) => setTimeout(r, (remaining + 0.5) * 1000));
       }
 
@@ -1595,6 +1641,7 @@ function registerQuestionThrottleTool(pi: ExtensionAPI) {
         answer: string | string[];
         wasCustom: boolean;
         index?: number;
+        throttled: boolean;
       } | null>((tui, theme, _kb, done) => {
         let optionIndex = 0;
         let editMode = false;
@@ -1790,6 +1837,10 @@ function registerQuestionThrottleTool(pi: ExtensionAPI) {
           }
 
           lines.push("");
+          if (wasThrottled) {
+            addWrappedWithPrefix(" ", theme.fg("dim", "⏳ Was throttled (cooldown enforced)"));
+            lines.push("");
+          }
           if (editMode) {
             addWrappedWithPrefix(" ", theme.fg("dim", "Enter to submit • Esc to go back"));
           } else if (isMulti) {
