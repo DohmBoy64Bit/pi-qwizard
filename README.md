@@ -7,6 +7,7 @@ Interactive question tools for [Pi](https://pi.dev), built for gathering user in
 ## Table of Contents
 
 - [Overview](#overview)
+- [Usage](#usage)
 - [Installation](#installation)
   - [From the npm registry](#from-the-npm-registry)
   - [From local source](#from-local-source)
@@ -35,6 +36,57 @@ Interactive question tools for [Pi](https://pi.dev), built for gathering user in
 | [`question_input`](#question_input) | Free-form text input | Required/optional input, length constraints, regex validation, type-specific validation |
 | [`question_throttle`](#question_throttle) | Rate-limited questions | Cooldown between prompts, global timestamp tracking |
 | [`question_branch`](#question_branch) | Conditional question flows | Branching logic, skip questions, operators (equals, contains, matches, in, etc.) |
+
+## Usage
+
+The `pi-qwizard` tools are **LLM-callable tools**, not user-typed commands. You tell the LLM to use them by describing what you need in your prompt. The LLM recognizes the tools and invokes them when user input is needed.
+
+### Getting the LLM to use the tools
+
+Simply describe the interaction you want in your message. The LLM will recognize the appropriate tool and render the interactive UI:
+
+**Single question:**
+```
+Ask me which database I want to use for this project.
+```
+
+**Multi-step questionnaire:**
+```
+Walk me through a project setup questionnaire — ask about the primary user, project scope, and timeline.
+```
+
+**Free-form text input:**
+```
+Ask me to describe my product in one sentence.
+```
+
+**Branching questions:**
+```
+Ask me about my tech preferences — choose a language first, then show framework options that match.
+```
+
+### What the user sees
+
+When the LLM calls a tool, the editor is replaced with an interactive TUI component:
+
+- **`question`** — Shows a numbered list of options. Use **↑/↓** to navigate, **Enter** to select, **Esc** to cancel.
+- **`questionnaire`** — Shows a tabbed wizard with progress bar. Use **Tab/←→** to switch questions, **↑/↓** to select options, **Enter** to advance.
+- **`question_input`** — Shows a text input field. Type your answer and press **Enter** to submit.
+- **`question_throttle`** — Same as `question` but with rate limiting between uses.
+- **`question_branch`** — Same as `questionnaire` but with conditional visibility — questions whose branch conditions aren't met are automatically skipped.
+
+### Management commands
+
+Use `/qwizard` slash commands to manage the extension (these ARE user-typed):
+
+| Command | Description |
+|---------|-------------|
+| `/qwizard help` | Show help message |
+| `/qwizard status` | Show extension status and settings |
+| `/qwizard auto-throttle on` | Enable auto-throttle |
+| `/qwizard auto-throttle off` | Disable auto-throttle |
+| `/qwizard auto-throttle 5` | Set cooldown to 5 seconds |
+| `/qwizard clear` | Clear throttle state |
 
 ## Installation
 
