@@ -203,7 +203,7 @@ Or add to your `settings.json`:
 
 ```json
 {
-  "packages": ["@dohmboy64bit/pi-qwizard"]
+  "packages": ["npm:@dohmboy64bit/pi-qwizard"]
 }
 ```
 
