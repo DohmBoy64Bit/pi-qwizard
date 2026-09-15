@@ -193,8 +193,10 @@ question_input({
 
 ## Installation
 
+### From npm registry
+
 ```bash
-pi install @dohmboy64bit/pi-qwizard
+pi install npm:@dohmboy64bit/pi-qwizard
 ```
 
 Or add to your `settings.json`:
@@ -203,6 +205,12 @@ Or add to your `settings.json`:
 {
   "packages": ["@dohmboy64bit/pi-qwizard@1.2.0"]
 }
+```
+
+### From local source
+
+```bash
+pi install ./path/to/pi-qwizard
 ```
 
 ## API Reference
