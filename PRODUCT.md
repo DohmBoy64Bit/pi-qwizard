@@ -12,7 +12,7 @@ Pi developers — both those already using Pi who are browsing extensions, and n
 
 ## Product Purpose
 
-pi-qwizard provides three interactive question tools (`question`, `questionnaire`, `question_input`) that render custom terminal UI interfaces directly inside Pi's TUI. It enables LLM agents to gather structured user input — from single-choice selections to multi-step wizards with validation — without leaving the terminal.
+pi-qwizard provides five interactive question tools (`question`, `questionnaire`, `question_input`, `question_throttle`, and `question_branch`) that render custom terminal UI interfaces directly inside Pi's TUI. It enables LLM agents to gather structured user input — from single-choice selections to multi-step wizards with validation — without leaving the terminal.
 
 ## Positioning
 
@@ -27,11 +27,11 @@ A Pi extension that renders fully custom TUI interfaces (not markdown, not HTML)
 
 ## Capabilities and Constraints
 
-- Three tools: `question`, `questionnaire`, `question_input`
+- Five tools: `question`, `questionnaire`, `question_input`, `question_throttle`, `question_branch`
 - Requires `@earendil-works/pi-coding-agent` as peer dependency
 - TypeScript project with Biome for linting
 - MIT licensed
-- Current version: 1.3.2
+- Current version: 1.7.1
 
 ## Brand Commitments
 
@@ -55,4 +55,4 @@ A Pi extension that renders fully custom TUI interfaces (not markdown, not HTML)
 
 ## Accessibility & Inclusion
 
-Keyboard navigation (↑↓, Enter, Esc, Tab) is built into all three tools. No specific accessibility standards beyond standard terminal accessibility.
+Keyboard navigation (↑↓, Enter, Esc, Tab) is built into all five tools. No specific accessibility standards beyond standard terminal accessibility.

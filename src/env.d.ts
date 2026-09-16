@@ -3,10 +3,7 @@ declare module "@earendil-works/pi-coding-agent" {
   export interface ToolExecuteContext {
     mode: string;
     ui: {
-      custom<T>(
-        factory: (...args: any[]) => void,
-        options?: { overlay?: boolean },
-      ): Promise<T>;
+      custom<T>(factory: (...args: any[]) => void, options?: { overlay?: boolean }): Promise<T>;
     };
     sessionManager: { setSessionName(name: string): void };
   }

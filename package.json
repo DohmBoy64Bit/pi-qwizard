@@ -1,13 +1,17 @@
 {
   "name": "@dohmboy64bit/pi-qwizard",
-  "version": "1.7.1",
+  "version": "1.7.2",
   "description": "Interactive question tools for Pi — single questions, multi-step questionnaires with validation, conditional types, and open-ended input",
   "main": "./src/index.ts",
   "type": "module",
   "scripts": {
     "test": "node src/questions.test.cjs",
+    "test:all": "npm test && npm run test:runtime && npm run coverage && npm run parity && npm run typecheck && npm run lint",
     "typecheck": "tsc --noEmit",
-    "lint": "biome check src/index.ts"
+    "test:runtime": "node --import tsx/esm --test test/*.test.ts",
+    "coverage": "c8 --all --include=src/core/*.ts --include=src/state/*.ts --include=src/widgets/*.ts --include=src/tools/question.ts --include=src/tools/question-input.ts --include=src/tools/question-throttle.ts --check-coverage --lines 80 --functions 80 --statements 80 --reporter=text --reporter=text-summary node --import tsx/esm --test test/*.test.ts",
+    "parity": "node scripts/parity-audit.cjs ../upload/pi-qwizard.zip",
+    "lint": "biome check src test scripts"
   },
   "keywords": [
     "pi-package",
@@ -36,6 +40,9 @@
     ]
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.5.13"
+    "@biomejs/biome": "^2.5.13",
+    "c8": "^12.0.0",
+    "tsx": "^4.23.13",
+    "typescript": "^5.9.2"
   }
 }

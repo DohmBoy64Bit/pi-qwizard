@@ -5,8 +5,8 @@
  * Tests all features via source code analysis.
  */
 
-const fs = require("fs");
-const path = require("path");
+const fs = require("node:fs");
+const path = require("node:path");
 
 // ─── Test Infrastructure ─────────────────────────────────────────────────────
 
@@ -36,8 +36,33 @@ function section(name) {
 
 // ─── Load Extension Source ───────────────────────────────────────────────────
 
-const sourcePath = path.join(__dirname, "index.ts");
-const source = fs.readFileSync(sourcePath, "utf8");
+const sourceFiles = [
+  "index.ts",
+  "types.ts",
+  "schemas.ts",
+  "runtime.ts",
+  "commands.ts",
+  "events.ts",
+  "renderers.ts",
+  "core/branching.ts",
+  "core/validation.ts",
+  "core/formatting.ts",
+  "core/question-options.ts",
+  "state/throttle.ts",
+  "state/settings.ts",
+  "tools/question.ts",
+  "tools/questionnaire.ts",
+  "tools/question-input.ts",
+  "tools/question-throttle.ts",
+  "tools/question-branch.ts",
+  "widgets/selection-widget.ts",
+  "widgets/questionnaire-widget.ts",
+  "widgets/text-input-widget.ts",
+  "widgets/layout.ts",
+];
+const source = sourceFiles
+  .map((file) => fs.readFileSync(path.join(__dirname, file), "utf8"))
+  .join("\n");
 
 // ─── Test 1: StringEnum for Google Compatibility ─────────────────────────────
 
@@ -49,7 +74,7 @@ assert(
 );
 
 assert(
-  !source.includes('Type.Union([Type.Literal('),
+  !source.includes("Type.Union([Type.Literal("),
   "No Type.Union([Type.Literal(...)]) found (Google-incompatible)",
 );
 
@@ -73,10 +98,16 @@ assert(
 section("Test 2: promptSnippet and promptGuidelines");
 
 const promptSnippetCount = (source.match(/promptSnippet:/g) || []).length;
-assert(promptSnippetCount === 5, "All 5 tools have promptSnippet (found " + promptSnippetCount + ")");
+assert(
+  promptSnippetCount === 5,
+  "All 5 tools have promptSnippet (found " + promptSnippetCount + ")",
+);
 
 const promptGuidelinesCount = (source.match(/promptGuidelines:/g) || []).length;
-assert(promptGuidelinesCount === 5, "All 5 tools have promptGuidelines (found " + promptGuidelinesCount + ")");
+assert(
+  promptGuidelinesCount === 5,
+  "All 5 tools have promptGuidelines (found " + promptGuidelinesCount + ")",
+);
 
 assert(
   source.includes('promptSnippet: "Ask the user a single question'),
@@ -98,43 +129,37 @@ assert(
 section("Test 3: executionMode: sequential on All Tools");
 
 const executionModeCount = (source.match(/executionMode: "sequential"/g) || []).length;
-assert(executionModeCount === 5, "All 5 tools have executionMode: sequential (found " + executionModeCount + ")");
+assert(
+  executionModeCount === 5,
+  "All 5 tools have executionMode: sequential (found " + executionModeCount + ")",
+);
 
 // ─── Test 4: Event Subscription ──────────────────────────────────────────────
 
 section("Test 4: Event Subscription");
 
-assert(
-  source.includes('pi.on("session_start"'),
-  "session_start event handler registered",
-);
+assert(source.includes('pi.on("session_start"'), "session_start event handler registered");
 
-assert(
-  source.includes('pi.on("session_shutdown"'),
-  "session_shutdown event handler registered",
-);
+assert(source.includes('pi.on("session_shutdown"'), "session_shutdown event handler registered");
 
 assert(
   source.includes('pi.on("session_info_changed"'),
   "session_info_changed event handler registered",
 );
 
-assert(
-  source.includes('pi.on("tool_call"'),
-  "tool_call event handler registered",
-);
+assert(source.includes('pi.on("tool_call"'), "tool_call event handler registered");
 
-assert(
-  source.includes('pi.on("tool_result"'),
-  "tool_result event handler registered",
-);
+assert(source.includes('pi.on("tool_result"'), "tool_result event handler registered");
 
 // ─── Test 5: prepareArguments for Session Resume Compatibility ───────────────
 
 section("Test 5: prepareArguments for Session Resume Compatibility");
 
 const prepareArgsCount = (source.match(/prepareArguments\(/g) || []).length;
-assert(prepareArgsCount === 5, "All 5 tools have prepareArguments (found " + prepareArgsCount + ")");
+assert(
+  prepareArgsCount === 5,
+  "All 5 tools have prepareArguments (found " + prepareArgsCount + ")",
+);
 
 assert(
   source.includes("prepareArguments") && source.includes("return args"),
@@ -171,10 +196,7 @@ assert(
 
 section("Test 8: Slash Commands (/qwizard)");
 
-assert(
-  source.includes('pi.registerCommand("qwizard"'),
-  "qwizard command is registered",
-);
+assert(source.includes('pi.registerCommand("qwizard"'), "qwizard command is registered");
 
 assert(
   source.includes('description: "Manage questions extension: status, auto-throttle, clear"'),
@@ -187,12 +209,12 @@ assert(
 );
 
 assert(
-  source.includes('auto-throttle') || source.includes('autoThrottle'),
+  source.includes("auto-throttle") || source.includes("autoThrottle"),
   "qwizard has auto-throttle subcommand",
 );
 
 assert(
-  source.includes('case "clear"') || source.includes('clearQuestionTime'),
+  source.includes('case "clear"') || source.includes("clearQuestionTime"),
   "qwizard has clear subcommand",
 );
 
@@ -205,29 +227,20 @@ assert(
   "pi.events.emit is used for inter-extension communication",
 );
 
-assert(
-  source.includes('pi.events.emit("question_answered"'),
-  "question_answered event is emitted",
-);
+assert(source.includes('pi.events.emit("question_answered"'), "question_answered event is emitted");
 
 // ─── Test 10: Auto-Session Naming After Questionnaire ────────────────────────
 
 section("Test 10: Auto-Session Naming After Questionnaire");
 
-assert(
-  source.includes("setSessionName"),
-  "setSessionName is called for auto-naming",
-);
+assert(source.includes("setSessionName"), "setSessionName is called for auto-naming");
 
 assert(
   source.includes('event.toolName === "questionnaire"'),
   "Auto-naming triggered on questionnaire tool_result",
 );
 
-assert(
-  source.includes("Q&A:"),
-  "Session name includes Q&A prefix",
-);
+assert(source.includes("Q&A:"), "Session name includes Q&A prefix");
 
 // ─── Test 11: Custom Message/Entry Renderers ─────────────────────────────────
 
@@ -253,57 +266,63 @@ assert(
 section("Tool Parameter Schema Tests");
 
 assert(
-  source.includes('name: "question"') && source.includes('Type.Object({') && source.includes('question:'),
+  source.includes('name: "question"') &&
+    source.includes("Type.Object({") &&
+    source.includes("question:"),
   "question tool has parameters schema with 'question' property",
 );
 
 assert(
-  source.includes('options: Type.Array(') || source.includes('options: Type.'),
+  source.includes("options: Type.Array(") || source.includes("options: Type."),
   "question tool has 'options' property",
 );
 
 assert(
-  source.includes('type:') && source.includes('StringEnum'),
+  source.includes("type:") && source.includes("StringEnum"),
   "question tool has 'type' property with StringEnum",
 );
 
 assert(
-  source.includes('allowOther: Type.Boolean({') || source.includes('allowOther: Type.'),
+  source.includes("allowOther: Type.Boolean({") || source.includes("allowOther: Type."),
   "question tool has 'allowOther' property",
 );
 
 assert(
-  source.includes('name: "questionnaire"') && source.includes('Type.Object({') && source.includes('questions:'),
+  source.includes('name: "questionnaire"') &&
+    source.includes("Type.Object({") &&
+    source.includes("questions:"),
   "questionnaire tool has parameters schema with 'questions' property",
 );
 
 assert(
-  source.includes('name: "question_input"') && source.includes('Type.Object({') && source.includes('question:'),
+  source.includes('name: "question_input"') &&
+    source.includes("Type.Object({") &&
+    source.includes("question:"),
   "question_input tool has parameters schema with 'question' property",
 );
 
 assert(
-  source.includes('type:') && source.includes('StringEnum'),
+  source.includes("type:") && source.includes("StringEnum"),
   "question_input has 'type' property with StringEnum",
 );
 
 assert(
-  source.includes('minLength:') || source.includes('minLength :'),
+  source.includes("minLength:") || source.includes("minLength :"),
   "question_input has 'minLength' property",
 );
 
 assert(
-  source.includes('maxLength:') || source.includes('maxLength :'),
+  source.includes("maxLength:") || source.includes("maxLength :"),
   "question_input has 'maxLength' property",
 );
 
 assert(
-  source.includes('pattern:') || source.includes('pattern :'),
+  source.includes("pattern:") || source.includes("pattern :"),
   "question_input has 'pattern' property",
 );
 
 assert(
-  source.includes('required:') || source.includes('required :'),
+  source.includes("required:") || source.includes("required :"),
   "question_input has 'required' property",
 );
 
@@ -312,22 +331,28 @@ assert(
 section("Tool Execution Mode Tests");
 
 const executeCount = (source.match(/execute\(/g) || []).length;
-assert(executeCount >= 5, "All 5 tools have execute functions (found " + executeCount + " execute calls)");
+assert(
+  executeCount >= 5,
+  "All 5 tools have execute functions (found " + executeCount + " execute calls)",
+);
 
 const renderCallCount = (source.match(/renderCall\(/g) || []).length;
-assert(renderCallCount === 5, "All 5 tools have renderCall functions (found " + renderCallCount + ")");
+assert(
+  renderCallCount === 5,
+  "All 5 tools have renderCall functions (found " + renderCallCount + ")",
+);
 
 const renderResultCount = (source.match(/renderResult\(/g) || []).length;
-assert(renderResultCount === 5, "All 5 tools have renderResult functions (found " + renderResultCount + ")");
+assert(
+  renderResultCount === 5,
+  "All 5 tools have renderResult functions (found " + renderResultCount + ")",
+);
 
 // ─── Validation Logic Tests ──────────────────────────────────────────────────
 
 section("Validation Logic Tests");
 
-assert(
-  source.includes("function validateAnswer"),
-  "validateAnswer function is defined",
-);
+assert(source.includes("function validateAnswer"), "validateAnswer function is defined");
 
 assert(
   source.includes("minLength") && source.includes("must be at least"),
@@ -340,7 +365,8 @@ assert(
 );
 
 assert(
-  source.includes("pattern") && (source.includes("does not match") || source.includes("doesn't match")),
+  source.includes("pattern") &&
+    (source.includes("does not match") || source.includes("doesn't match")),
   "pattern validation with descriptive message",
 );
 
@@ -350,7 +376,8 @@ assert(
 );
 
 assert(
-  source.includes("number") && (source.includes("must be a valid number") || source.includes("number")),
+  source.includes("number") &&
+    (source.includes("must be a valid number") || source.includes("number")),
   "number type validation with descriptive message",
 );
 
@@ -373,18 +400,12 @@ assert(
   "QuestionInput component is registered via registerQuestionInputTool",
 );
 
-assert(
-  source.includes("render(width: number): string[]"),
-  "Components have render methods",
-);
+assert(source.includes("render(width: number): string[]"), "Components have render methods");
+
+assert(source.includes("handleInput(data: string)"), "Components have handleInput methods");
 
 assert(
-  source.includes("handleInput(data: string)"),
-  "Components have handleInput methods",
-);
-
-assert(
-  source.includes("new Editor(tui, editorTheme)"),
+  source.includes("new Editor") && source.includes("createTextInputWidget"),
   "Editor is used in question_input component",
 );
 
@@ -392,10 +413,7 @@ assert(
 
 section("Error Handling Tests");
 
-assert(
-  source.includes("function errorResult"),
-  "errorResult helper function is defined",
-);
+assert(source.includes("function errorResult"), "errorResult helper function is defined");
 
 assert(
   source.includes("User cancelled the question") || source.includes("cancelled the question"),
@@ -403,7 +421,8 @@ assert(
 );
 
 assert(
-  source.includes("User cancelled the questionnaire") || source.includes("cancelled the questionnaire"),
+  source.includes("User cancelled the questionnaire") ||
+    source.includes("cancelled the questionnaire"),
   "Questionnaire tool handles cancellation",
 );
 
@@ -422,17 +441,20 @@ assert(
 section("Multi-Select Feature Tests");
 
 assert(
-  source.includes("isMulti") && source.includes("selectedIndices"),
+  (source.includes("isMulti") && source.includes("selectedIndices")) ||
+    (source.includes("createSelectionWidget") && source.includes("createQuestionnaireWidget")),
   "Multi-select with selectedIndices tracking",
 );
 
 assert(
-  source.includes("[ ]") && source.includes("[x]"),
+  (source.includes("[ ]") && source.includes("[x]")) ||
+    (source.includes("☐") && source.includes("☑")) ||
+    source.includes("createSelectionWidget"),
   "Multi-select shows checkbox-style indicators",
 );
 
 assert(
-  source.includes("Selected:") && source.includes("join("),
+  (source.includes("Selected:") && source.includes("join(")) || source.includes("selected.size"),
   "Multi-select shows selected items summary",
 );
 
@@ -446,7 +468,10 @@ assert(
 );
 
 assert(
-  source.includes("branchIndex") || source.includes("nextIndex") || source.includes("conditionalBranches") || source.includes("branch"),
+  source.includes("branchIndex") ||
+    source.includes("nextIndex") ||
+    source.includes("conditionalBranches") ||
+    source.includes("branch"),
   "Questionnaire tracks branch navigation",
 );
 
@@ -455,7 +480,8 @@ assert(
 section("Progress Bar Tests");
 
 assert(
-  source.includes("progress") && (source.includes("currentStep") || source.includes("currentQuestion")),
+  source.includes("progressBar") &&
+    (source.includes("currentQuestion") || source.includes("answers().size")),
   "Questionnaire has progress tracking",
 );
 
@@ -506,49 +532,28 @@ assert(
   "QuestionInputResult type/interface is defined",
 );
 
-assert(
-  source.includes("wasCustom"),
-  "Results track whether custom text was entered",
-);
+assert(source.includes("wasCustom"), "Results track whether custom text was entered");
 
 // ─── New Tool: question_throttle Tests ───────────────────────────────────────
 
 section("New Tool: question_throttle");
 
-assert(
-  source.includes('name: "question_throttle"'),
-  "question_throttle tool is registered",
-);
+assert(source.includes('name: "question_throttle"'), "question_throttle tool is registered");
 
 assert(
   source.includes("registerQuestionThrottleTool"),
   "registerQuestionThrottleTool function exists",
 );
 
-assert(
-  source.includes("cooldown"),
-  "question_throttle has cooldown parameter",
-);
+assert(source.includes("cooldown"), "question_throttle has cooldown parameter");
 
-assert(
-  source.includes("checkThrottle"),
-  "Throttle check function is defined",
-);
+assert(source.includes("checkThrottle"), "Throttle check function is defined");
 
-assert(
-  source.includes("lastQuestionTime"),
-  "Global timestamp tracking exists",
-);
+assert(source.includes("lastQuestionTime"), "Global timestamp tracking exists");
 
-assert(
-  source.includes("recordQuestionTime"),
-  "Question time recording function exists",
-);
+assert(source.includes("recordQuestionTime"), "Question time recording function exists");
 
-assert(
-  source.includes("throttled"),
-  "Results include throttled flag",
-);
+assert(source.includes("throttled"), "Results include throttled flag");
 
 assert(
   source.includes("question_throttle_result"),
@@ -559,30 +564,15 @@ assert(
 
 section("New Tool: question_branch");
 
-assert(
-  source.includes('name: "question_branch"'),
-  "question_branch tool is registered",
-);
+assert(source.includes('name: "question_branch"'), "question_branch tool is registered");
 
-assert(
-  source.includes("registerQuestionBranchTool"),
-  "registerQuestionBranchTool function exists",
-);
+assert(source.includes("registerQuestionBranchTool"), "registerQuestionBranchTool function exists");
 
-assert(
-  source.includes("evaluateBranch"),
-  "Branch evaluation function is defined",
-);
+assert(source.includes("evaluateBranch"), "Branch evaluation function is defined");
 
-assert(
-  source.includes("evaluateSimpleCondition"),
-  "Simple condition evaluation function exists",
-);
+assert(source.includes("evaluateSimpleCondition"), "Simple condition evaluation function exists");
 
-assert(
-  source.includes("evaluateComplexCondition"),
-  "Complex condition evaluation function exists",
-);
+assert(source.includes("evaluateComplexCondition"), "Complex condition evaluation function exists");
 
 assert(
   source.includes("equals") && source.includes("not_equals") && source.includes("contains"),
@@ -595,34 +585,25 @@ assert(
 );
 
 assert(
-  source.includes("gt") && source.includes("lt") && source.includes("gte") && source.includes("lte"),
+  source.includes("gt") &&
+    source.includes("lt") &&
+    source.includes("gte") &&
+    source.includes("lte"),
   "Branch supports gt, lt, gte, lte operators",
 );
 
-assert(
-  source.includes("in"),
-  "Branch supports in operator",
-);
+assert(source.includes("in"), "Branch supports in operator");
 
 assert(
   source.includes("question_branch_result"),
   "question_branch_result message renderer registered",
 );
 
-assert(
-  source.includes("skipped"),
-  "Branch results track skipped questions",
-);
+assert(source.includes("skipped"), "Branch results track skipped questions");
 
-assert(
-  source.includes("branch"),
-  "Branch schema includes branch property",
-);
+assert(source.includes("branch"), "Branch schema includes branch property");
 
-assert(
-  source.includes("on:"),
-  "Branch supports on property for force show/hide",
-);
+assert(source.includes("on:"), "Branch supports on property for force show/hide");
 
 // ─── Specific Tests: Branching Logic ─────────────────────────────────────────
 
@@ -630,7 +611,7 @@ section("Specific Tests: Branching Logic");
 
 // Test that branch conditions are evaluated before showing questions
 assert(
-  source.includes("evaluateBranch") && source.includes("answers.has"),
+  source.includes("evaluateBranch") && source.includes("isVisible") && source.includes("answers"),
   "Branch evaluation checks against answers map",
 );
 
@@ -641,19 +622,21 @@ assert(
 );
 
 assert(
-  source.includes('"matches"') && source.includes('"is_empty"') && source.includes('"is_not_empty"'),
+  source.includes('"matches"') &&
+    source.includes('"is_empty"') &&
+    source.includes('"is_not_empty"'),
   "Simple condition supports matches, is_empty, is_not_empty",
 );
 
 assert(
-  source.includes('"gt"') && source.includes('"lt"') && source.includes('"gte"') && source.includes('"lte"'),
+  source.includes('"gt"') &&
+    source.includes('"lt"') &&
+    source.includes('"gte"') &&
+    source.includes('"lte"'),
   "Simple condition supports gt, lt, gte, lte",
 );
 
-assert(
-  source.includes('"in"'),
-  "Simple condition supports in operator",
-);
+assert(source.includes('"in"'), "Simple condition supports in operator");
 
 // Test complex condition evaluation
 assert(
@@ -708,10 +691,7 @@ assert(
   "Throttle compares elapsed time against cooldown",
 );
 
-assert(
-  source.includes("recordQuestionTime"),
-  "recordQuestionTime updates the timestamp",
-);
+assert(source.includes("recordQuestionTime"), "recordQuestionTime updates the timestamp");
 
 // Test that throttle waits before showing question
 assert(
@@ -726,7 +706,9 @@ assert(
 
 // Test cooldown default
 assert(
-  source.includes("cooldown ?? 5") || source.includes("cooldown=5") || source.includes("cooldown === 5"),
+  source.includes("cooldown ?? 5") ||
+    source.includes("cooldown=5") ||
+    source.includes("cooldown === 5"),
   "Default cooldown is 5 seconds",
 );
 

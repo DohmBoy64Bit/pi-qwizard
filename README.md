@@ -1,632 +1,153 @@
 # pi-qwizard
 
-Interactive question tools for [Pi](https://pi.dev), built for gathering user input directly in the TUI.
+Interactive question tools for [Pi](https://pi.dev). QWizard lets an agent collect structured choices, free-form text, multi-step answers, and conditional responses through Pi’s terminal UI.
 
-`pi-qwizard` provides five focused tools for selectable prompts, multi-step questionnaires, validated free-form input, rate-limited questions, and branching logic — with support for multi-select, conditional question types, validation, custom text entry, and more.
+## What it provides
 
-## Table of Contents
+| Tool | Use it when you need to… |
+| --- | --- |
+| `question` | Ask one selectable question, including optional custom text entry or multi-select. |
+| `questionnaire` | Collect answers across several questions in a tabbed wizard. |
+| `question_input` | Collect a written answer with optional validation. |
+| `question_throttle` | Ask a selectable question while enforcing a cooldown. |
+| `question_branch` | Run a questionnaire whose questions can be shown or skipped based on earlier answers. |
 
-- [Overview](#overview)
-- [Usage](#usage)
-- [Installation](#installation)
-  - [From the npm registry](#from-the-npm-registry)
-  - [From local source](#from-local-source)
-- [Tools](#tools)
-  - [`question`](#question)
-  - [`questionnaire`](#questionnaire)
-  - [`question_input`](#question_input)
-  - [`question_throttle`](#question_throttle)
-  - [`question_branch`](#question_branch)
-- [API Reference](#api-reference)
-  - [`question` Parameters](#question-parameters)
-  - [`questionnaire` Parameters](#questionnaire-parameters)
-  - [`question_input` Parameters](#question_input-parameters)
-  - [`question_throttle` Parameters](#question_throttle-parameters)
-  - [`question_branch` Parameters](#question_branch-parameters)
-- [License](#license)
+QWizard is an extension for Pi, not a standalone application. The tools are intended to be called by the agent; `/qwizard` is the user-facing command for managing extension settings.
 
-## Overview
+## Requirements
 
-`pi-qwizard` includes five tools for common interactive input workflows in Pi:
-
-| Tool | Best for | Key capabilities |
-| --- | --- | --- |
-| [`question`](#question) | A single selectable prompt | Single-select, multi-select, optional custom text entry |
-| [`questionnaire`](#questionnaire) | Multi-step question flows | Tabbed wizard, progress tracking, optional questions, multi-select, pre-built question types, conditional visibility |
-| [`question_input`](#question_input) | Free-form text input | Required/optional input, length constraints, regex validation, type-specific validation |
-| [`question_throttle`](#question_throttle) | Rate-limited questions | Cooldown between prompts, global timestamp tracking |
-| [`question_branch`](#question_branch) | Conditional question flows | Branching logic, skip questions, operators (equals, contains, matches, in, etc.) |
-
-## Usage
-
-The `pi-qwizard` tools are **LLM-callable tools**, not user-typed commands. You tell the LLM to use them by describing what you need in your prompt. The LLM recognizes the tools and invokes them when user input is needed.
-
-### Getting the LLM to use the tools
-
-Simply describe the interaction you want in your message. The LLM will recognize the appropriate tool and render the interactive UI:
-
-**Single question:**
-```
-Ask me which database I want to use for this project.
-```
-
-**Multi-step questionnaire:**
-```
-Walk me through a project setup questionnaire — ask about the primary user, project scope, and timeline.
-```
-
-**Free-form text input:**
-```
-Ask me to describe my product in one sentence.
-```
-
-**Branching questions:**
-```
-Ask me about my tech preferences — choose a language first, then show framework options that match.
-```
-
-### What the user sees
-
-When the LLM calls a tool, the editor is replaced with an interactive TUI component:
-
-- **`question`** — Shows a numbered list of options. Use **↑/↓** to navigate, **Enter** to select, **Esc** to cancel.
-- **`questionnaire`** — Shows a tabbed wizard with progress bar. Use **Tab/←→** to switch questions, **↑/↓** to select options, **Enter** to advance.
-- **`question_input`** — Shows a text input field. Type your answer and press **Enter** to submit.
-- **`question_throttle`** — Same as `question` but with rate limiting between uses.
-- **`question_branch`** — Same as `questionnaire` but with conditional visibility — questions whose branch conditions aren't met are automatically skipped.
-
-### Management commands
-
-Use `/qwizard` slash commands to manage the extension (these ARE user-typed):
-
-| Command | Description |
-|---------|-------------|
-| `/qwizard help` | Show help message |
-| `/qwizard status` | Show extension status and settings |
-| `/qwizard auto-throttle on` | Enable auto-throttle |
-| `/qwizard auto-throttle off` | Disable auto-throttle |
-| `/qwizard auto-throttle 5` | Set cooldown to 5 seconds |
-| `/qwizard clear` | Clear throttle state |
+- Pi installed and available as `pi`.
+- An interactive Pi TUI session for question tools. In non-interactive mode, tools return an error result instead of opening a prompt.
 
 ## Installation
 
-### From the npm registry
-
-Install the package with Pi:
+Install from npm:
 
 ```bash
 pi install npm:@dohmboy64bit/pi-qwizard
 ```
 
-Or add it to your `settings.json`:
+Or add the package to Pi settings:
 
 ```json
-{
-  "packages": ["npm:@dohmboy64bit/pi-qwizard"]
-}
+{"packages": ["npm:@dohmboy64bit/pi-qwizard"]}
 ```
 
-### From local source
-
-Install directly from a local checkout or project directory:
+For a local checkout:
 
 ```bash
 pi install ./path/to/pi-qwizard
 ```
 
-Or add the local path to your `settings.json`:
+You can also add the local path to `settings.json`:
 
 ```json
-{
-  "packages": ["./path/to/pi-qwizard"]
-}
+{"packages": ["./path/to/pi-qwizard"]}
 ```
 
-## Tools
+Restart Pi or start a new session after installing an extension.
 
-### `question`
+## Using QWizard
 
-Ask a single question with selectable options. It supports single or multiple selection and can optionally include a **"Type something..."** fallback for custom text.
+Describe the interaction you want in your prompt. Pi can then choose the appropriate tool:
 
-#### Basic usage
-
-```typescript
-question({
-  question: "What's your preferred database?",
-  options: [
-    { label: "PostgreSQL", description: "Relational, ACID-compliant" },
-    { label: "MongoDB", description: "Document-based, flexible schema" },
-    { label: "SQLite", description: "Embedded, zero-config" },
-  ]
-})
+```text
+Ask me which database I want to use for this project.
 ```
 
-#### Advanced usage
-
-Disable the **"Type something..."** option:
-
-```typescript
-question({
-  question: "Choose your plan",
-  options: [
-    { label: "Free" },
-    { label: "Pro" },
-  ],
-  allowOther: false
-})
+```text
+Walk me through a project setup questionnaire covering the user, scope, and timeline.
 ```
 
-Enable multiple selection:
-
-```typescript
-question({
-  question: "Select your skills (multiple)",
-  options: [
-    { label: "JavaScript" },
-    { label: "Python" },
-    { label: "Go" },
-  ],
-  type: "multi"
-})
+```text
+Ask me to describe the product in one sentence and require an answer.
 ```
 
-#### Interface
+The agent selects the tool and opens the corresponding TUI. Exact parameters and result contracts are documented in [API Reference](docs/API.md).
 
-Use **↑ / ↓** to navigate the options. Press **Enter** to select or toggle an option. Press **Esc** to cancel in single-select mode or submit the selected options in multi-select mode.
+## Keyboard controls
 
----
+### Selectable questions
 
-### `questionnaire`
+`question` and `question_throttle` use a selectable list:
 
-Ask multiple questions in a tabbed wizard with progress tracking. Each question has its own tab with selectable options.
+- `↑` / `↓` move through options.
+- `Enter` selects an option.
+- `Esc` cancels a single-select prompt.
+- In multi-select mode, `Enter` toggles an option; pressing `Enter` again on the same selected option submits the selection.
+- When custom text is enabled, selecting **Type something...** opens text entry. `Enter` submits non-empty text and `Esc` returns to the option list.
 
-#### Basic usage
+### Questionnaires
 
-```typescript
-questionnaire({
-  questions: [
-    {
-      id: "primary_user",
-      label: "User",
-      prompt: "Who is the primary user?",
-      options: [
-        { label: "Developers" },
-        { label: "Designers" },
-        { label: "Managers" },
-      ]
-    },
-    {
-      id: "scope",
-      label: "Scope",
-      prompt: "What's the project scope?",
-      options: [
-        { label: "MVP" },
-        { label: "Full product" },
-        { label: "Exploration" },
-      ]
-    }
-  ]
-})
+`questionnaire` and `question_branch` use the questionnaire widget:
+
+- `↑` / `↓` move through the current question’s options.
+- `Enter` selects or confirms the current option.
+- `Tab` or `→` moves forward.
+- `←` moves backward.
+- `Esc` cancels the questionnaire.
+- A review screen appears after the final question.
+
+### Free-form input
+
+`question_input` opens an input overlay. Type the answer and press `Enter` to submit, or press `Esc` to cancel. Validation errors remain visible until corrected.
+
+## Managing the extension
+
+These are user-typed Pi slash commands:
+
+```text
+/qwizard help
+/qwizard status
+/qwizard auto-throttle on
+/qwizard auto-throttle off
+/qwizard auto-throttle 5
+/qwizard clear
 ```
 
-#### Advanced usage
-
-##### Optional questions and auto-advance control
-
-Questions can be required or optional, and `autoAdvance` can be controlled per question through the questionnaire API.
-
-```typescript
-questionnaire({
-  questions: [
-    {
-      id: "name",
-      prompt: "Your name",
-      options: [],
-      allowOther: true,
-      required: true
-    },
-    {
-      id: "feedback",
-      prompt: "Additional comments",
-      options: [],
-      allowOther: true,
-      required: false  // Optional question
-    }
-  ]
-})
-```
-
-##### Pre-built question types
-
-```typescript
-questionnaire({
-  questions: [
-    { id: "satisfaction", prompt: "Rate your experience", type: "rating" },
-    { id: "recommend", prompt: "Would you recommend us?", type: "yes_no" }
-  ]
-})
-```
-
-##### Multi-select questions
-
-```typescript
-questionnaire({
-  questions: [
-    {
-      id: "skills",
-      prompt: "Select your skills",
-      options: [
-        { label: "JavaScript" },
-        { label: "Python" },
-        { label: "Go" },
-      ],
-      type: "multi"
-    }
-  ]
-})
-```
-
-##### Conditional visibility with `when`
-
-```typescript
-questionnaire({
-  questions: [
-    {
-      id: "language",
-      prompt: "Choose your language",
-      options: [
-        { label: "JavaScript" },
-        { label: "Python" },
-      ]
-    },
-    {
-      id: "framework",
-      prompt: "Choose a framework",
-      options: [
-        { label: "React" },
-        { label: "Vue" },
-      ],
-      when: "language equals JavaScript"
-    }
-  ]
-})
-```
-
-#### Interface
-
-The questionnaire uses a tab bar with a progress indicator, for example `█░ 60% (3/5)`.
-
-- **Tab / →**: switch forward
-- **Shift+Tab / ←**: switch backward
-- **↑ / ↓**: select options
-- **Enter**: advance
-- **Esc**: cancel
-
----
-
-### `question_input`
-
-Ask an open-ended question with free-form text input. It supports validation including length constraints, regex patterns, and type-specific validation.
-
-#### Basic usage
-
-```typescript
-question_input({
-  question: "Describe your product in one sentence:",
-  placeholder: "e.g., 'An AI assistant for terminal workflows'",
-  required: true
-})
-```
-
-#### Advanced usage
-
-##### Email validation
-
-```typescript
-question_input({
-  question: "Your email address",
-  type: "email",
-  required: true
-})
-```
-
-##### Number input with range
-
-```typescript
-question_input({
-  question: "Your age",
-  type: "number",
-  minLength: 1,
-  maxLength: 3
-})
-```
-
-##### Regex pattern validation
-
-```typescript
-question_input({
-  question: "Username (letters, numbers, underscores)",
-  pattern: "^[a-zA-Z0-9_]+$",
-  minLength: 3,
-  maxLength: 20
-})
-```
-
-#### Interface
-
-The tool uses an inline text editor with a character count. Press **Enter** to submit or **Esc** to cancel. Validation errors are shown inline.
-
----
-
-### `question_throttle`
-
-Ask a question with rate limiting. Ensures a minimum cooldown period between questions to prevent spam. Tracks timestamps globally across all question tools.
-
-#### Basic usage
-
-```typescript
-question_throttle({
-  question: "What's your favorite color?",
-  options: [
-    { label: "Red" },
-    { label: "Blue" },
-    { label: "Green" },
-  ]
-})
-```
-
-#### Custom cooldown
-
-Set a longer cooldown between questions:
-
-```typescript
-question_throttle({
-  question: "What's your preferred framework?",
-  options: [
-    { label: "React" },
-    { label: "Vue" },
-    { label: "Svelte" },
-  ],
-  cooldown: 15  // 15 seconds minimum between questions
-})
-```
-
-#### Interface
-
-Same as `question` — use **↑ / ↓** to navigate, **Enter** to select, **Esc** to cancel. The cooldown is enforced silently before the question appears.
-
----
-
-### `question_branch`
-
-Multi-question wizard with advanced branching logic. Questions can be conditionally shown or hidden based on previous answers using a variety of comparison operators.
-
-#### Basic usage
-
-```typescript
-question_branch({
-  questions: [
-    {
-      id: "language",
-      prompt: "Choose your language",
-      options: [
-        { label: "JavaScript" },
-        { label: "Python" },
-      ]
-    },
-    {
-      id: "frontend",
-      prompt: "Choose a frontend framework",
-      options: [
-        { label: "React" },
-        { label: "Vue" },
-      ],
-      when: "language equals JavaScript"
-    },
-    {
-      id: "backend",
-      prompt: "Choose a backend framework",
-      options: [
-        { label: "Django" },
-        { label: "Flask" },
-      ],
-      when: "language equals Python"
-    }
-  ]
-})
-```
-
-#### Advanced branching operators
-
-The `when` field supports multiple operators:
-
-| Operator | Description | Example |
-| --- | --- | --- |
-| `equals` | Exact match (default) | `"language equals JavaScript"` |
-| `not_equals` | Not equal | `"role not_equals admin"` |
-| `contains` | Substring match | `"name contains John"` |
-| `matches` | Regex match | `"email matches @gmail.com"` |
-| `in` | Value in comma-separated list | `"tags in React, Vue"` |
-| `is_empty` | Answer is empty | `"feedback is_empty"` |
-| `is_not_empty` | Answer is not empty | `"comments is_not_empty"` |
-| `gt` | Greater than | `"score gt 80"` |
-| `lt` | Less than | `"age lt 18"` |
-| `gte` | Greater than or equal | `"level gte 5"` |
-| `lte` | Less than or equal | `"score lte 100"` |
-
-#### Object syntax for complex conditions
-
-```typescript
-question_branch({
-  questions: [
-    {
-      id: "experience",
-      prompt: "Years of experience",
-      options: [
-        { label: "Junior" },
-        { label: "Mid-level" },
-        { label: "Senior" },
-      ]
-    },
-    {
-      id: "senior_roles",
-      prompt: "Preferred senior role",
-      options: [
-        { label: "Architect" },
-        { label: "Tech Lead" },
-        { label: "Principal" },
-      ],
-      when: {
-        field: "experience",
-        operator: "equals",
-        value: "Senior"
-      }
-    }
-  ]
-})
-```
-
-#### Always show or hide
-
-Use the `on` property to force visibility regardless of conditions:
-
-```typescript
-question_branch({
-  questions: [
-    {
-      id: "language",
-      prompt: "Choose your language",
-      options: [
-        { label: "JavaScript" },
-        { label: "Python" },
-      ]
-    },
-    {
-      id: "deprecated_tool",
-      prompt: "Use legacy tool?",
-      options: [
-        { label: "Yes" },
-        { label: "No" },
-      ],
-      on: false  // Always hidden
-    }
-  ]
-})
-```
-
-#### Interface
-
-Same as `questionnaire` — tab bar with progress indicator, **Tab / →** to switch forward, **Shift+Tab / ←** to switch backward, **↑ / ↓** to select, **Enter** to advance, **Esc** to cancel. Questions that don't match their branch condition are skipped.
-
-## API Reference
-
-### `question` Parameters
-
-| Parameter | Type | Default | Description |
-| --- | --- | --- | --- |
-| `question` | `string` | required | The question text |
-| `options` | `array` | required | Array of `{ label, description? }` objects |
-| `allowOther` | `boolean` | `true` | Include the **"Type something..."** option |
-| `type` | `"single" \| "multi"` | `"single"` | Selection mode |
-
-### `questionnaire` Parameters
-
-| Parameter | Type | Default | Description |
-| --- | --- | --- | --- |
-| `questions` | `array` | required | Array of question objects |
-
-#### Question object parameters
-
-| Parameter | Type | Default | Description |
-| --- | --- | --- | --- |
-| `id` | `string` | required | Unique identifier |
-| `label` | `string` | `"Q{n}"` | Tab bar label |
-| `prompt` | `string` | required | Full question text |
-| `options` | `array` | required | Array of `{ label, description? }` objects |
-| `allowOther` | `boolean` | `true` | Include the **"Type something..."** option |
-| `required` | `boolean` | `true` | Must be answered before submit |
-| `autoAdvance` | `boolean` | `true` | Auto-advance after selection |
-| `when` | `string` | — | Conditional visibility expression |
-| `type` | `"single" \| "multi" \| "yes_no" \| "rating"` | `"single"` | Question type |
-
-### `question_input` Parameters
-
-| Parameter | Type | Default | Description |
-| --- | --- | --- | --- |
-| `question` | `string` | required | The question text |
-| `placeholder` | `string` | — | Placeholder text in input |
-| `required` | `boolean` | `true` | Answer must be non-empty |
-| `minLength` | `number` | — | Minimum character count |
-| `maxLength` | `number` | — | Maximum character count |
-| `pattern` | `string` | — | Regex pattern to match |
-| `type` | `"text" \| "number" \| "email" \| "date"` | `"text"` | Input type for validation |
-
-### `question_throttle` Parameters
-
-| Parameter | Type | Default | Description |
-| --- | --- | --- | --- |
-| `question` | `string` | required | The question text |
-| `options` | `array` | required | Array of `{ label, description? }` objects |
-| `cooldown` | `number` | `5` | Minimum seconds between questions |
-| `allowOther` | `boolean` | `true` | Include the **"Type something..."** option |
-| `type` | `"single" \| "multi"` | `"single"` | Selection mode |
-
-### `question_branch` Parameters
-
-| Parameter | Type | Default | Description |
-| --- | --- | --- | --- |
-| `questions` | `array` | required | Array of question objects |
-
-#### Question object parameters
-
-| Parameter | Type | Default | Description |
-| --- | --- | --- | --- |
-| `id` | `string` | required | Unique identifier |
-| `label` | `string` | `"Q{n}"` | Tab bar label |
-| `prompt` | `string` | required | Full question text |
-| `options` | `array` | required | Array of `{ label, description? }` objects |
-| `allowOther` | `boolean` | `true` | Include the **"Type something..."** option |
-| `required` | `boolean` | `true` | Must be answered before submit |
-| `autoAdvance` | `boolean` | `true` | Auto-advance after selection |
-| `when` | `string \| object \| array` | — | Condition expression (string, object with `{field, operator, value}`, or array). See operators below. |
-| `on` | `boolean` | — | Force show (`true`) or hide (`false`), overrides `when` |
-| `type` | `"single" \| "multi" \| "yes_no" \| "rating"` | `"single"` | Question type |
-
-## Auto-Throttle
-
-The extension includes automatic throttling between question tools to prevent rapid-fire prompts. This is enabled by default.
-
-### Configuration
-
-Auto-throttle settings are managed via slash commands:
-
-```
-/qwizard auto-throttle on     # Enable auto-throttle
-/qwizard auto-throttle off    # Disable auto-throttle
-/qwizard auto-throttle 5      # Set cooldown to 5 seconds
-/qwizard status               # Show current settings
-/qwizard clear                # Clear throttle state
-```
-
-### Settings via settings.json
-
-You can also configure auto-throttle in your `settings.json`:
-
-```json
-{
-  "qwizard": {
-    "autoThrottle": {
-      "enabled": true,
-      "cooldown": 3
-    }
-  }
-}
-```
-
-| Setting | Type | Default | Description |
-| --- | --- | --- | --- |
-| `qwizard.autoThrottle.enabled` | `boolean` | `true` | Enable/disable auto-throttle |
-| `qwizard.autoThrottle.cooldown` | `number` | `3` | Cooldown in seconds (1-60) |
+Automatic throttling is enabled by default with a 3-second cooldown. The `question_throttle` tool has its own default cooldown of 5 seconds. Automatic-throttle commands accept cooldowns from 1 through 60 seconds.
+
+## Choosing a tool
+
+- Use `question` for one decision from a list.
+- Use `question_input` when the answer is primarily written text.
+- Use `questionnaire` for several related questions without conditional visibility.
+- Use `question_branch` when later questions depend on earlier answers.
+- Use `question_throttle` when repeated selectable prompts need a minimum interval.
+
+## Troubleshooting
+
+### No prompt appears
+
+Question tools require Pi’s interactive TUI. In non-interactive mode, the tool returns an error result with `answer: null` or a cancelled questionnaire result.
+
+### A questionnaire cannot be submitted
+
+Required visible questions must have answers. Optional questions may remain unanswered. In a branching questionnaire, hidden questions are skipped and do not block submission.
+
+### A custom answer is unavailable
+
+For `question` and `question_throttle`, custom text is enabled by default and can be disabled with `allowOther: false`. Questionnaire schemas accept `allowOther` for compatibility, but the current questionnaire widget only renders supplied options; use `question_input` when a questionnaire step needs written text.
+
+### A prompt is delayed
+
+Automatic throttling or `question_throttle` may be enforcing its cooldown. Use `/qwizard status` to inspect automatic settings and `/qwizard clear` to clear the in-memory throttle timestamp.
+
+### Validation rules
+
+Before opening the TUI, QWizard normalizes carriage returns in user-facing text and rejects invalid questionnaire data, including:
+
+- Empty questionnaires
+- Duplicate question IDs
+- Empty option lists for regular selectable questions
+- Duplicate option labels within one question
+- Reserved labels such as `Other` and `Type something...`
+
+Generated `yes_no` and `rating` questions provide their own options automatically.
+
+## API documentation
+
+For exact parameters, defaults, supported question types, branching operators, result shapes, lifecycle events, and development commands, see [docs/API.md](docs/API.md).
 
 ## License
 
