@@ -1,6 +1,8 @@
 # pi-qwizard
 
-Interactive question tools for [Pi](https://pi.dev). QWizard lets an agent collect structured choices, free-form text, multi-step answers, and conditional responses through Pi’s terminal UI.
+Interactive question tools for [Pi](https://pi.dev). QWizard lets an agent collect structured choices, free-form text, multi-step answers, and conditional responses through Pi's terminal UI.
+
+**Version 1.8.0** — Upgraded to Node.js 26 compatibility.
 
 ## What it provides
 
@@ -148,6 +150,14 @@ Generated `yes_no` and `rating` questions provide their own options automaticall
 ## API documentation
 
 For exact parameters, defaults, supported question types, branching operators, result shapes, lifecycle events, and development commands, see [docs/API.md](docs/API.md).
+
+## Changelog
+
+### v1.8.0
+- Upgraded to Node.js 26 compatibility
+
+### v1.7.3
+- Previous release
 
 ## License
 
